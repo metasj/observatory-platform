@@ -683,6 +683,7 @@ def azure_to_google_cloud_storage_transfer(azure_storage_account_name: str, azur
                                            include_prefixes: List[str], gc_project_id: str, gc_bucket: str,
                                            description: str, start_date: Pendulum = pendulum.utcnow()) -> bool:
     """ Transfer files from an Azure blob container to a Google Cloud Storage bucket.
+
     :param azure_storage_account_name: the name of the Azure Storage account that holds the Azure blob container.
     :param azure_sas_token: the shared access signature (SAS) for the Azure blob container.
     :param azure_container: the name of the Azure Blob container where files will be copied from.
@@ -742,6 +743,7 @@ def aws_to_google_cloud_storage_transfer(aws_access_key_id: str, aws_secret_key:
                                          last_modified_before: datetime = None,  start_date: Pendulum =
                                          pendulum.utcnow()) -> Tuple[bool, int]:
     """ Transfer files from an Azure blob container to a Google Cloud Storage bucket.
+
     :param aws_access_key_id: the id of the key for the aws S3 bucket.
     :param aws_secret_key: the secret key for the aws S3 bucket.
     :param aws_bucket: the name of the aws S3 bucket where files will be copied from.
