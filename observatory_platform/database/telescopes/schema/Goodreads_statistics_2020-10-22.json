@@ -1,0 +1,62 @@
+[
+  {
+    "description": "ID for the book.",
+    "mode": "REQUIRED",
+    "name": "id",
+    "type": "INTEGER"
+  },
+  {
+    "description": "ISBN of the book.",
+    "mode": "NULLABLE",
+    "name": "isbn",
+    "type": "INTEGER"
+  },
+  {
+    "description": "ISBN13 of the book.",
+    "mode": "NULLABLE",
+    "name": "isbn13",
+    "type": "INTEGER"
+  },
+  {
+    "description": "Number of ratings given for that particular book.",
+    "mode": "NULLABLE",
+    "name": "ratings_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "Number of reviews given for that particular book.",
+    "mode": "NULLABLE",
+    "name": "reviews_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "Number of text-only reviews given for that particular book.",
+    "mode": "NULLABLE",
+    "name": "text_reviews_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "Number of ratings given for all editions of the book.",
+    "mode": "NULLABLE",
+    "name": "work_ratings_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "Number of reviews given for all editions of the book.",
+    "mode": "NULLABLE",
+    "name": "work_reviews_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "Number of text-only reviews for all editions of the book.",
+    "mode": "NULLABLE",
+    "name": "work_text_reviews_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "Average rating for all editions of the book.",
+    "mode": "NULLABLE",
+    "name": "average_rating",
+    "type": "INTEGER"
+  }
+]
