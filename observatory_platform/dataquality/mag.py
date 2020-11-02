@@ -16,6 +16,7 @@
 
 # Author: Tuan Chien
 
+import logging
 import pandas as pd
 import pydata_google_auth
 
@@ -23,6 +24,7 @@ from datetime import datetime, timezone
 from google.oauth2 import service_account
 from jinja2 import Environment, PackageLoader
 from scipy.spatial.distance import jensenshannon
+from typing import Union
 
 from elasticsearch.helpers import bulk
 
@@ -31,9 +33,11 @@ from elasticsearch_dsl import (
     Search
 )
 
+from pandas import DataFrame
+
 from observatory_platform.dataquality.es_mag import (
-    MagReleaseEs,
-    FieldsOfStudyLevel0
+    MagFosL0Metrics,
+    MagFosL0Counts
 )
 
 from observatory_platform.dataquality.utils import (
@@ -61,6 +65,8 @@ class MagAnalyser:
     BigQuery (maybe).
     '''
 
+    FOS_TABLE_ID = 'FieldsOfStudy'
+
     def __init__(self, project_id='academic-observatory-dev', dataset_id='mag'):
         self.project_id = project_id
         self.dataset_id = dataset_id
@@ -73,82 +79,129 @@ class MagAnalyser:
         Analyse FieldsOfStudy.
         '''
 
-        table_id = 'FieldsOfStudy'
         end_date = datetime.now(timezone.utc)
 
-        # See if there are any previously computed records we can load
-        es_out = []  # Data to write out to ES
-        # Nothing has been computed.  Populate ES for the first time.
+        # Get the releases.
+        sql = self.suffix_tpl.render(project_id=self.project_id, dataset_id=self.dataset_id,
+                                     table_id=MagAnalyser.FOS_TABLE_ID, end_date=end_date)
+        releases = reversed(pd.read_gbq(sql, project_id=self.project_id)['suffix'])
+        logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
 
+        # See how many releases have already been saved.
         try:
-            es_count = Search(index=MagReleaseEs.Index.name).count()
+            es_count = Search(index=MagFosL0Metrics.Index.name).count()
         except:
             es_count = 0
 
+        # No new releases, do nothing.
+        if len(releases) <= es_count:
+            logging.info('No new MAG releases in BigQuery.')
+            return
+
         if es_count == 0:
-            sql = self.suffix_tpl.render(project_id=self.project_id, dataset_id=self.dataset_id, table_id=table_id,
-                                         end_date=end_date)
-            ts = pd.read_gbq(sql, project_id=self.project_id)
-            previous_ts = ts['suffix'][0].date().strftime('%Y%m%d')
-            previous_table_id = f'{table_id}{previous_ts}'
-            sql = self.select_tpl.render(
-                project_id=self.project_id, dataset_id=self.dataset_id, table_id=previous_table_id,
-                columns=['FieldOfStudyId, NormalizedName, PaperCount, CitationCount'], order_by='FieldOfStudyId',
-                where='Level = 0'
-            )
-            previous_counts = pd.read_gbq(sql, project_id=self.project_id)
+            logging.info('No data found in elastic search. Calculating for all releases.')
+            previous_counts = self._get_fos_counts(releases, 'previous')
+        else:
+            dstr = releases[es_count - 1].date().isoformat()
+            previous_counts = self._get_es_magfosl0_counts(dstr)
+            logging.info('Previous records found. Adding records for the latest releases.')
+            if previous_counts is None:
+                logging.warning('Inconsistent records found in elastic search. Recalculating all releases.')
+                es_count = 0
+                self._clear_es_records(MagFosL0Metrics.Index.name)
+                self._clear_es_records(MagFosL0Counts.Index.name)
+                previous_counts = self._get_fos_counts(releases, 'previous')
 
-            for i in range(len(ts['suffix'])):
-                current_ts = ts['suffix'][i].date().strftime('%Y%m%d')
-                current_table_id = f'{table_id}{current_ts}'
-                sql = self.select_tpl.render(
-                    project_id=self.project_id, dataset_id=self.dataset_id, table_id=current_table_id,
-                    columns=['FieldOfStudyId, NormalizedName, PaperCount, CitationCount'], order_by='FieldOfStudyId',
-                    where='Level = 0'
-                )
-                current_counts = pd.read_gbq(sql, project_id=self.project_id)
+        # Construct elastic search documents
+        docs = []
+        for i in range(es_count, len(releases)):
+            current_counts = self._get_fos_counts(releases, i)
+            self._create_es_fosl0_docs(docs, current_counts, previous_counts, releases[i].date())
 
-                # Meta data structure for elastic search
-                es_mag = MagReleaseEs(release=ts['suffix'][i].date())
+            # Loop maintenance
+            previous_counts = current_counts
 
-                # Check Id equality
-                id_unchanged = (
-                            current_counts['FieldOfStudyId'].to_list() == previous_counts['FieldOfStudyId'].to_list())
+        # Bulk document index on ElasticSearch
+        bulk(
+            connections.get_connection(),
+            (doc.to_dict(include_meta=True) for doc in docs),
+            refresh=True,
+        )
 
-                # Check NormalizedName equality
-                normalized_unchanged = current_counts['NormalizedName'].to_list() == previous_counts[
-                    'NormalizedName'].to_list()
+    def _create_es_fosl0_docs(self, docs, current_counts, previous_counts, release):
+        id_unchanged = (
+                current_counts['FieldOfStudyId'].to_list() == previous_counts['FieldOfStudyId'].to_list())
 
-                es_mag_fos_level0 = FieldsOfStudyLevel0(field_ids=current_counts['FieldOfStudyId'].to_list(),
-                                                        field_ids_unchanged=id_unchanged,
-                                                        normalized_names=current_counts['NormalizedName'].to_list(),
-                                                        normalized_names_unchanged=normalized_unchanged,
-                                                        paper_counts=current_counts['PaperCount'].to_list(),
-                                                        citation_counts=current_counts['CitationCount'].to_list()
-                                                        )
+        normalized_unchanged = current_counts['NormalizedName'].to_list() == previous_counts[
+            'NormalizedName'].to_list()
 
-                # Only do computation if ids and names unchanged
-                if id_unchanged and normalized_unchanged:
-                    es_mag_fos_level0.delta_ppaper = proportion_delta(current_counts['PaperCount'],
-                                                                      previous_counts['PaperCount']).to_list()
-                    es_mag_fos_level0.delta_pcitations = proportion_delta(current_counts['CitationCount'],
-                                                                          previous_counts['CitationCount']).to_list()
-                    es_mag_fos_level0.js_dist_paper = jensenshannon(current_counts['PaperCount'],
-                                                                    previous_counts['PaperCount'])
-                    es_mag_fos_level0.js_dist_citation = jensenshannon(current_counts['CitationCount'],
-                                                                       previous_counts['CitationCount'])
+        if id_unchanged and normalized_unchanged:
+            delta_ppaper = proportion_delta(current_counts['PaperCount'],
+                                            previous_counts['PaperCount']).to_list()
+            delta_pcitations = proportion_delta(current_counts['CitationCount'],
+                                                previous_counts['CitationCount']).to_list()
 
-                es_mag.fields_of_study_level0 = es_mag_fos_level0
-                es_out.append(es_mag)
+        # Populate counts
+        for i in range(len(current_counts['PaperCount'])):
+            fosl0_counts = MagFosL0Counts(release=release)
+            fosl0_counts.field_id = current_counts['FieldOfStudyId'][i]
+            fosl0_counts.normalized_name = current_counts['NormalizedName'][i]
+            fosl0_counts.paper_count = current_counts['PaperCount'][i]
+            fosl0_counts.citation_count = current_counts['CitationCount'][i]
+            if id_unchanged and normalized_unchanged:
+                fosl0_counts.delta_ppaper = delta_ppaper[i]
+                fosl0_counts.delta_pcitations = delta_pcitations[i]
+            docs.append(fosl0_counts)
 
-                # Loop maintenance
-                previous_counts = current_counts
+        # Populate metrics
+        fosl0_metrics = MagFosL0Metrics(release=release)
+        fosl0_metrics.field_ids_unchanged = id_unchanged
+        fosl0_metrics.normalized_names_unchanged = normalized_unchanged
 
-            bulk(
-                connections.get_connection(),
-                (doc.to_dict(include_meta=True) for doc in es_out),
-                refresh=True,
-            )
+        if id_unchanged and normalized_unchanged:
+            fosl0_metrics.js_dist_paper = jensenshannon(current_counts['PaperCount'],
+                                             previous_counts['PaperCount'])
+            fosl0_metrics.js_dist_citation = jensenshannon(current_counts['CitationCount'],
+                                                previous_counts['CitationCount'])
+        docs.append(fosl0_metrics)
+
+        return docs
+
+    def _clear_es_records(self, index):
+        s = Search(index=index).query()
+        s.delete()
+
+    def _get_es_magfosl0_counts(self, release: str) -> Union[None, DataFrame]:
+        s = Search(index=MagFosL0Counts.Index.name).query('match', release=release)
+        response = s.execute()
+
+        # Something went wrong with ES records. Delete existing and recompute them.
+        if len(response.hits) == 0:
+            return None
+
+        cmp_id = lambda x, y : x.field_id < y.field_id
+        data = {
+            'FieldOfStudyId': sorted([x.field_id for x in response.hits], cmp_id),
+            'NormalizedName': sorted([x.normalized_name for x in response.hits], cmp_id),
+            'PaperCount': sorted([x.paper_count for x in response.hits], cmp_id),
+            'CitationCount': sorted([x.citation_count for x in response.hits], cmp_id),
+        }
+
+        return pd.DataFrame(data=data)
+
+    def _get_fos_counts(self, releases, target: Union[int, str]):
+        if target == 'previous':
+            ts = releases[0].date().strftime('%Y%m%d')
+        else:
+            ts = releases[target].date().strftime('%Y%m%d')
+
+        table_id = f'{MagAnalyser.FOS_TABLE_ID}{ts}'
+        sql = self.select_tpl.render(
+            project_id=self.project_id, dataset_id=self.dataset_id, table_id=table_id,
+            columns=['FieldOfStudyId, NormalizedName, PaperCount, CitationCount'], order_by='FieldOfStudyId',
+            where='Level = 0'
+        )
+        return pd.read_gbq(sql, project_id=self.project_id)
 
     def affiliations(self):
         '''
