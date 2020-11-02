@@ -84,7 +84,7 @@ class MagAnalyser:
         # Get the releases.
         sql = self.suffix_tpl.render(project_id=self.project_id, dataset_id=self.dataset_id,
                                      table_id=MagAnalyser.FOS_TABLE_ID, end_date=end_date)
-        releases = reversed(pd.read_gbq(sql, project_id=self.project_id)['suffix'])
+        releases = list(reversed(pd.read_gbq(sql, project_id=self.project_id)['suffix']))
         logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
 
         # See how many releases have already been saved.
@@ -172,19 +172,18 @@ class MagAnalyser:
         s.delete()
 
     def _get_es_magfosl0_counts(self, release: str) -> Union[None, DataFrame]:
-        s = Search(index=MagFosL0Counts.Index.name).query('match', release=release)
-        response = s.execute()
+        s = Search(index=MagFosL0Counts.Index.name).query('match', release=release).sort('field_id').scan()
+        hits = list(s)
 
         # Something went wrong with ES records. Delete existing and recompute them.
-        if len(response.hits) == 0:
+        if len(hits) == 0:
             return None
 
-        cmp_id = lambda x, y : x.field_id < y.field_id
         data = {
-            'FieldOfStudyId': sorted([x.field_id for x in response.hits], cmp_id),
-            'NormalizedName': sorted([x.normalized_name for x in response.hits], cmp_id),
-            'PaperCount': sorted([x.paper_count for x in response.hits], cmp_id),
-            'CitationCount': sorted([x.citation_count for x in response.hits], cmp_id),
+            'FieldOfStudyId': [x.field_id for x in hits],
+            'NormalizedName': [x.normalized_name for x in hits],
+            'PaperCount': [x.paper_count for x in hits],
+            'CitationCount': [x.citation_count for x in hits],
         }
 
         return pd.DataFrame(data=data)
