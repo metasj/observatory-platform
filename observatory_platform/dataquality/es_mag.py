@@ -35,52 +35,62 @@ from elasticsearch_dsl import (
 )
 
 
-class FieldsOfStudyLevel0(InnerDoc):
-    field_ids = Long(required=True, multi=True)
-    field_ids_unchanged = Boolean(required=True)
-    normalized_names = Text(required=True, multi=True)
-    normalized_names_unchanged = Boolean(required=True)
-    paper_counts = Long(required=True, multi=True)
-    citation_counts = Long(required=True, multi=True)
-    delta_ppaper = Double(multi=True)
-    delta_pcitations = Double(multi=True)
-    js_dist_paper = Double(multi=True)
-    js_dist_citation = Double(multi=True)
-
-
-class MagReleaseEs(Document):
-    ''' Base class for Microsoft Academic Graph release data quality analytics. '''
-
+class MagFosL0Metrics(Document):
     release = Date(required=True, default_timezone='UTC')
-    fields_of_study_level0 = Object(FieldsOfStudyLevel0)
+    field_ids_unchanged = Boolean(required=True)
+    normalized_names_unchanged = Boolean(required=True)
+
+    js_dist_paper = Double()
+    js_dist_citation = Double()
 
     class Index:
-        name = 'dataquality-mag'
+        name = 'dataquality-mag-fieldsofstudy-l0-metrics'
         settings = {
             'number_of_shards': 2,
             'number_of_replicas': 0
         }
 
     @classmethod
-    def _matches(cls, hits):
+    def _matches(cls, _):
         '''
-        MagReleaseDQ is an abstract class, make sure it never gets used for deserialization.
-        @param hits: unused.
+        MagReleaseEs is an abstract class, make sure it never gets used for deserialization.
         '''
 
         return False
-
-    def add_fields_of_study(self, field_ids, normalized_names, paper_counts, citation_counts, created=None,
-                            commit=True):
-        self.fields_of_study = FieldsOfStudy(
-            field_ids=field_ids, normalized_names=normalized_names, paper_counts=paper_counts,
-            citation_counts=citation_counts, created=created or datetime.now())
-        if commit:
-            self.save()
-        return self.fields_of_study
 
     def save(self, **kwargs):
         # if there is no date, use now
         if self.release is None:
             self.release = datetime.now()
-        return super(MagReleaseEs, self).save(**kwargs)
+        return super(MagFosL0Metrics, self).save(**kwargs)
+
+
+class MagFosL0Counts(Document):
+    release = Date(required=True, default_timezone='UTC')
+    field_id = Long(required=True)
+    normalized_name = Text(required=True)
+    paper_count = Long(required=True)
+    citation_count = Long(required=True)
+    delta_ppaper = Double(required=True)
+    delta_pcitations = Double(required=True)
+
+    class Index:
+        name = 'dataquality-mag-fieldsofstudy-l0-counts'
+        settings = {
+            'number_of_shards': 2,
+            'number_of_replicas': 0
+        }
+
+    @classmethod
+    def _matches(cls, _):
+        '''
+        MagReleaseEs is an abstract class, make sure it never gets used for deserialization.
+        '''
+
+        return False
+
+    def save(self, **kwargs):
+        # if there is no date, use now
+        if self.release is None:
+            self.release = datetime.now()
+        return super(MagFosL0Counts, self).save(**kwargs)
