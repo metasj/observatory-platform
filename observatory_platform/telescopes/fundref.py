@@ -715,9 +715,10 @@ class FundrefTelescope:
         project_id = Variable.get(AirflowVar.project_id.get())
         data_location = Variable.get(AirflowVar.data_location.get())
         bucket_name = Variable.get(AirflowVar.transform_bucket_name.get())
+        dataset_id = FundrefTelescope.DATASET_ID
 
         # Create dataset
-        create_bigquery_dataset(project_id, FundrefTelescope.DAG_ID, data_location, FundrefTelescope.DESCRIPTION)
+        create_bigquery_dataset(project_id, dataset_id, data_location, FundrefTelescope.DESCRIPTION)
 
         # Load each release into BigQuery
         for release in releases_list:
@@ -734,7 +735,7 @@ class FundrefTelescope:
             # Load BigQuery table
             uri = f"gs://{bucket_name}/{release.get_blob_name(SubFolder.transformed)}"
             logging.info(f"URI: {uri}")
-            load_bigquery_table(uri, FundrefTelescope.DATASET_ID, data_location, table_id, schema_file_path,
+            load_bigquery_table(uri, dataset_id, data_location, table_id, schema_file_path,
                                 SourceFormat.NEWLINE_DELIMITED_JSON)
 
     @staticmethod
