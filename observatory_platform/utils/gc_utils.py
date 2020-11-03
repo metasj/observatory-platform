@@ -335,7 +335,8 @@ def create_bigquery_table_from_query(sql: str, project_id: str, dataset_id: str,
         description=description,
         labels=labels,
         use_legacy_sql=False,
-        query_parameters=query_parameters
+        query_parameters=query_parameters,
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
     )
 
     # Set partitioning settings
