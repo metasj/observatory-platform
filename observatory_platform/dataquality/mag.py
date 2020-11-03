@@ -74,18 +74,13 @@ class MagAnalyser:
         self.suffix_tpl = self.env.get_template('select_table_suffixes.sql.jinja2')
         self.select_tpl = self.env.get_template('select_table.sql.jinja2')
 
+        self.end_date = datetime.now(timezone.utc)
+        self.releases = self._get_releases()
+
     def fields_of_study(self):
         '''
         Analyse FieldsOfStudy.
         '''
-
-        end_date = datetime.now(timezone.utc)
-
-        # Get the releases.
-        sql = self.suffix_tpl.render(project_id=self.project_id, dataset_id=self.dataset_id,
-                                     table_id=MagAnalyser.FOS_TABLE_ID, end_date=end_date)
-        releases = list(reversed(pd.read_gbq(sql, project_id=self.project_id)['suffix']))
-        logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
 
         # See how many releases have already been saved.
         try:
@@ -94,15 +89,15 @@ class MagAnalyser:
             es_count = 0
 
         # No new releases, do nothing.
-        if len(releases) <= es_count:
+        if len(self.releases) <= es_count:
             logging.info('No new MAG releases in BigQuery.')
             return
 
         if es_count == 0:
             logging.info('No data found in elastic search. Calculating for all releases.')
-            previous_counts = self._get_fos_counts(releases, 'previous')
+            previous_counts = self._get_fos_counts(self.releases, 'previous')
         else:
-            dstr = releases[es_count - 1].date().isoformat()
+            dstr = self.releases[es_count - 1].date().isoformat()
             previous_counts = self._get_es_magfosl0_counts(dstr)
             logging.info('Previous records found. Adding records for the latest releases.')
             if previous_counts is None:
@@ -110,13 +105,13 @@ class MagAnalyser:
                 es_count = 0
                 self._clear_es_records(MagFosL0Metrics.Index.name)
                 self._clear_es_records(MagFosL0Counts.Index.name)
-                previous_counts = self._get_fos_counts(releases, 'previous')
+                previous_counts = self._get_fos_counts(self.releases, 'previous')
 
         # Construct elastic search documents
         docs = []
-        for i in range(es_count, len(releases)):
-            current_counts = self._get_fos_counts(releases, i)
-            self._create_es_fosl0_docs(docs, current_counts, previous_counts, releases[i].date())
+        for i in range(es_count, len(self.releases)):
+            current_counts = self._get_fos_counts(self.releases, i)
+            self._create_es_fosl0_docs(docs, current_counts, previous_counts, self.releases[i].date())
 
             # Loop maintenance
             previous_counts = current_counts
@@ -201,6 +196,13 @@ class MagAnalyser:
             where='Level = 0'
         )
         return pd.read_gbq(sql, project_id=self.project_id)
+
+    def _get_releases(self):
+        sql = self.suffix_tpl.render(project_id=self.project_id, dataset_id=self.dataset_id,
+                                     table_id=MagAnalyser.FOS_TABLE_ID, end_date=self.end_date)
+        releases = list(reversed(pd.read_gbq(sql, project_id=self.project_id)['suffix']))
+        logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
+        return releases
 
     def affiliations(self):
         '''
