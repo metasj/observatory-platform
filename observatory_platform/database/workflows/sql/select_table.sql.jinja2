@@ -25,12 +25,12 @@ FROM
 WHERE {{ where }}
 {% endif %}
 
-{% if order_by %}
-ORDER BY {{ order_by }}
-{% endif %}
-
 {% if group_by %}
 GROUP BY {{ group_by }}
+{% endif %}
+
+{% if order_by %}
+ORDER BY {{ order_by }}
 {% endif %}
 
 {% if limit %}
