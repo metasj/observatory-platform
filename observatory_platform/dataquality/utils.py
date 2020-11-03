@@ -20,4 +20,4 @@ import numpy as np
 
 
 def proportion_delta(latest, previous):
-    return (latest - previous) / np.sum(previous)
+    return (latest - previous) / previous
