@@ -16,8 +16,32 @@
 
 # Author: Tuan Chien
 
+import pandas as pd
 import numpy as np
 
-
 def proportion_delta(latest, previous):
+    """ Computes proportional difference.
+    @param latest: Latest data.
+    @param previous: Previous data.
+    @return: Proportional difference.
+    """
+
+
+    # If one of them is a DataFrame, we require both of them to be
+    if isinstance(latest, pd.DataFrame):
+        if not isinstance(previous, pd.DataFrame):
+            raise ValueError('One argument is a DataFrame, but not both.')
+        latest = pd.DataFrame(np.float64(latest))
+        previous = pd.DataFrame(np.float64(previous))
+
+    if isinstance(latest, list):
+        latest = np.array(latest, dtype='float64')
+
+    if isinstance(previous, list):
+        previous = np.array(previous, dtype='float64')
+
+    eps = 1e-9
+    latest = latest + eps
+    previous = previous + eps
+
     return (latest - previous) / previous
