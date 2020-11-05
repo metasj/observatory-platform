@@ -110,15 +110,33 @@ class MagAnalyserModule(ABC):
         raise NotImplementedError
 
 
+class MagCacheKey:
+    """ Cache key names """
+    
+    RELEASES = 'releases'
+    FOSL0 = 'fosl0_'  # concatenated with a date string (%Y%m%d)
+
+
+class MagTableKey:
+    """ BQ table and column names. """
+    
+    TID_PAPERS = 'Papers'
+    TID_FOS = 'FieldsOfStudy'
+
+    COL_PAP_COUNT = 'PaperCount'
+    COL_CIT_COUNT = 'CitationCount'
+    COL_NORM_NAME = 'NormalizedName'
+    COL_FOS_ID = 'FieldOfStudyId'
+
+    COL_DOI = 'Doi'
+    COL_YEAR = 'Year'
+    COL_TOTAL = 'total'
+    COL_FAMILY_ID = 'FamilyId'
+    COL_DOC_TYPE = 'DocType'
+
 class FieldsOfStudyLevel0Module(MagAnalyserModule):
     """ MagAnalyser module to compute a profile on the MAG Level 0 FieldsOfStudy information. """
 
-    CACHE_ID_PREFIX = 'fosl0id_'
-    CACHE_NAME_PREFIX = 'fosl0name_'
-    BQ_PAPER_COUNT = 'PaperCount'
-    BQ_CITATION_COUNT = 'CitationCount'
-    BQ_NORMALIZED_NAME = 'NormalizedName'
-    BQ_FOS_ID = 'FieldOfStudyId'
     ES_FOS_ID = 'field_id'
 
     def __init__(self, project_id: str, dataset_id: str, cache):
@@ -151,7 +169,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         @param kwargs: Not used.
         """
 
-        releases = self._cache[MagAnalyser.CACHE_RELEASES]
+        releases = self._cache[MagCacheKey.RELEASES]
         num_releases = len(releases)
 
         if num_releases == self._num_es_metrics and num_releases == self._num_es_counts:
@@ -189,25 +207,24 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         for i in range(self._num_es_counts, len(releases)):
             release = releases[i]
             current_counts = self._get_bq_counts(release)
-            curr_fosid = current_counts[FieldsOfStudyLevel0Module.BQ_FOS_ID].to_list()
-            curr_fosname = current_counts[FieldsOfStudyLevel0Module.BQ_NORMALIZED_NAME].to_list()
-            prev_fosid = previous_counts[FieldsOfStudyLevel0Module.BQ_FOS_ID].to_list()
-            prev_fosname = previous_counts[FieldsOfStudyLevel0Module.BQ_NORMALIZED_NAME].to_list()
+            curr_fosid = current_counts[MagTableKey.COL_FOS_ID].to_list()
+            curr_fosname = current_counts[MagTableKey.COL_NORM_NAME].to_list()
+            prev_fosid = previous_counts[MagTableKey.COL_FOS_ID].to_list()
+            prev_fosname = previous_counts[MagTableKey.COL_NORM_NAME].to_list()
 
             id_unchanged = curr_fosid == prev_fosid
             normalized_unchanged = curr_fosname == prev_fosname
 
-            ts = release.strftime('%Y%m%d')
-            self._cache[f'{FieldsOfStudyLevel0Module.CACHE_ID_PREFIX}{ts}'] = curr_fosid
-            self._cache[f'{FieldsOfStudyLevel0Module.CACHE_NAME_PREFIX}{ts}'] = curr_fosname
+            ts = release.isoformat()
+            self._cache[f'{MagCacheKey.FOSL0}{ts}'] = list(zip(curr_fosid, curr_fosname))
 
             dppaper = None
             dpcitations = None
             if id_unchanged and normalized_unchanged:
-                dppaper = proportion_delta(current_counts[FieldsOfStudyLevel0Module.BQ_PAPER_COUNT],
-                                           previous_counts[FieldsOfStudyLevel0Module.BQ_PAPER_COUNT])
-                dpcitations = proportion_delta(current_counts[FieldsOfStudyLevel0Module.BQ_CITATION_COUNT],
-                                               previous_counts[FieldsOfStudyLevel0Module.BQ_CITATION_COUNT])
+                dppaper = proportion_delta(current_counts[MagTableKey.COL_PAP_COUNT],
+                                           previous_counts[MagTableKey.COL_PAP_COUNT])
+                dpcitations = proportion_delta(current_counts[MagTableKey.COL_CIT_COUNT],
+                                               previous_counts[MagTableKey.COL_CIT_COUNT])
 
             # Populate counts
             counts = FieldsOfStudyLevel0Module._construct_es_counts(releases[i], current_counts, dppaper, dpcitations)
@@ -234,12 +251,12 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         """
 
         docs = list()
-        for i in range(len(current_counts[FieldsOfStudyLevel0Module.BQ_PAPER_COUNT])):
+        for i in range(len(current_counts[MagTableKey.COL_PAP_COUNT])):
             fosl0_counts = MagFosL0Counts(release=release)
-            fosl0_counts.field_id = current_counts[FieldsOfStudyLevel0Module.BQ_FOS_ID][i]
-            fosl0_counts.normalized_name = current_counts[FieldsOfStudyLevel0Module.BQ_NORMALIZED_NAME][i]
-            fosl0_counts.paper_count = current_counts[FieldsOfStudyLevel0Module.BQ_PAPER_COUNT][i]
-            fosl0_counts.citation_count = current_counts[FieldsOfStudyLevel0Module.BQ_CITATION_COUNT][i]
+            fosl0_counts.field_id = current_counts[MagTableKey.COL_FOS_ID][i]
+            fosl0_counts.normalized_name = current_counts[MagTableKey.COL_NORM_NAME][i]
+            fosl0_counts.paper_count = current_counts[MagTableKey.COL_PAP_COUNT][i]
+            fosl0_counts.citation_count = current_counts[MagTableKey.COL_CIT_COUNT][i]
             if dppaper is not None:
                 fosl0_counts.delta_ppaper = dppaper[i]
             if dpcitations is not None:
@@ -264,10 +281,10 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         metrics.normalized_names_unchanged = normalized_unchanged
 
         if id_unchanged and normalized_unchanged:
-            metrics.js_dist_paper = jensenshannon(current_counts[FieldsOfStudyLevel0Module.BQ_PAPER_COUNT],
-                                                  previous_counts[FieldsOfStudyLevel0Module.BQ_PAPER_COUNT])
-            metrics.js_dist_citation = jensenshannon(current_counts[FieldsOfStudyLevel0Module.BQ_CITATION_COUNT],
-                                                     previous_counts[FieldsOfStudyLevel0Module.BQ_CITATION_COUNT])
+            metrics.js_dist_paper = jensenshannon(current_counts[MagTableKey.COL_PAP_COUNT],
+                                                  previous_counts[MagTableKey.COL_PAP_COUNT])
+            metrics.js_dist_citation = jensenshannon(current_counts[MagTableKey.COL_CIT_COUNT],
+                                                     previous_counts[MagTableKey.COL_CIT_COUNT])
         return metrics
 
     def _get_bq_counts(self, release: datetime.date) -> DataFrame:
@@ -278,12 +295,12 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         """
 
         ts = release.strftime('%Y%m%d')
-        table_id = f'{MagAnalyser.FOS_TABLE_ID}{ts}'
+        table_id = f'{MagTableKey.TID_FOS}{ts}'
         sql = self._tpl_select.render(
             project_id=self._project_id, dataset_id=self._dataset_id, table_id=table_id,
-            columns=[FieldsOfStudyLevel0Module.BQ_FOS_ID, FieldsOfStudyLevel0Module.BQ_NORMALIZED_NAME,
-                     FieldsOfStudyLevel0Module.BQ_PAPER_COUNT, FieldsOfStudyLevel0Module.BQ_CITATION_COUNT],
-            order_by=FieldsOfStudyLevel0Module.BQ_FOS_ID,
+            columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME,
+                     MagTableKey.COL_PAP_COUNT, MagTableKey.COL_CIT_COUNT],
+            order_by=MagTableKey.COL_FOS_ID,
             where='Level = 0'
         )
         return pd.read_gbq(sql, project_id=self._project_id)
@@ -302,10 +319,10 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
             return None
 
         data = {
-            FieldsOfStudyLevel0Module.BQ_FOS_ID: [x.field_id for x in hits],
-            FieldsOfStudyLevel0Module.BQ_NORMALIZED_NAME: [x.normalized_name for x in hits],
-            FieldsOfStudyLevel0Module.BQ_PAPER_COUNT: [x.paper_count for x in hits],
-            FieldsOfStudyLevel0Module.BQ_CITATION_COUNT: [x.citation_count for x in hits],
+            MagTableKey.COL_FOS_ID: [x.field_id for x in hits],
+            MagTableKey.COL_NORM_NAME: [x.normalized_name for x in hits],
+            MagTableKey.COL_PAP_COUNT: [x.paper_count for x in hits],
+            MagTableKey.COL_CIT_COUNT: [x.citation_count for x in hits],
         }
 
         return pd.DataFrame(data=data)
@@ -313,12 +330,6 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
 
 class PaperMetricsModule(MagAnalyserModule):
     """ MagAnalyser module to compute some basic metrics for the Papers dataset in MAG. """
-
-    BQ_DOI = 'Doi'
-    BQ_YEAR = 'Year'
-    BQ_TOTAL = 'total'
-    BQ_FAMILY_ID = 'FamilyId'
-    BQ_DOC_TYPE = 'DocType'
 
     def __init__(self, project_id: str, dataset_id: str, cache):
         """ Initialise the module.
@@ -349,7 +360,7 @@ class PaperMetricsModule(MagAnalyserModule):
         """
 
         eps = 1e-9
-        releases = self._cache[MagAnalyser.CACHE_RELEASES]
+        releases = self._cache[MagCacheKey.RELEASES]
         num_releases = len(releases)
 
         if self._es_count == num_releases:
@@ -361,12 +372,12 @@ class PaperMetricsModule(MagAnalyserModule):
                 continue
             null_metrics = self._get_paper_null_counts(releases[i])
             es_paper_metrics = MagPapersMetrics(release=releases[i].isoformat())
-            es_paper_metrics.total = null_metrics[PaperMetricsModule.BQ_TOTAL][0] + eps
+            es_paper_metrics.total = null_metrics[MagTableKey.COL_TOTAL][0] + eps
 
-            es_paper_metrics.null_year = null_metrics[PaperMetricsModule.BQ_YEAR][0] + eps
-            es_paper_metrics.null_doi = null_metrics[PaperMetricsModule.BQ_DOI][0] + eps
-            es_paper_metrics.null_doctype = null_metrics[PaperMetricsModule.BQ_DOC_TYPE][0] + eps
-            es_paper_metrics.null_familyid = null_metrics[PaperMetricsModule.BQ_FAMILY_ID][0] + eps
+            es_paper_metrics.null_year = null_metrics[MagTableKey.COL_YEAR][0] + eps
+            es_paper_metrics.null_doi = null_metrics[MagTableKey.COL_DOI][0] + eps
+            es_paper_metrics.null_doctype = null_metrics[MagTableKey.COL_DOC_TYPE][0] + eps
+            es_paper_metrics.null_familyid = null_metrics[MagTableKey.COL_FAMILY_ID][0] + eps
 
             es_paper_metrics.pnull_year = es_paper_metrics.null_year / es_paper_metrics.total
             es_paper_metrics.pnull_doi = es_paper_metrics.null_doi / es_paper_metrics.total
@@ -384,11 +395,11 @@ class PaperMetricsModule(MagAnalyserModule):
         """
 
         ts = release.strftime('%Y%m%d')
-        table_id = f'{MagAnalyser.PAPERS_TABLE_ID}{ts}'
+        table_id = f'{MagTableKey.TID_PAPERS}{ts}'
         sql = self._tpl_null_count.render(
             project_id=self._project_id, dataset_id=self._dataset_id, table_id=table_id,
-            null_count=[PaperMetricsModule.BQ_DOI, PaperMetricsModule.BQ_DOC_TYPE, PaperMetricsModule.BQ_YEAR,
-                        PaperMetricsModule.BQ_FAMILY_ID]
+            null_count=[MagTableKey.COL_DOI, MagTableKey.COL_DOC_TYPE, MagTableKey.COL_YEAR,
+                        MagTableKey.COL_FAMILY_ID]
         )
         return pd.read_gbq(sql, project_id=self._project_id)
 
@@ -423,7 +434,7 @@ class PaperYearsCountModule(MagAnalyserModule):
         @param kwargs: Unused.
         """
 
-        releases = self._cache[MagAnalyser.CACHE_RELEASES]
+        releases = self._cache[MagCacheKey.RELEASES]
         num_releases = len(releases)
 
         docs = list()
@@ -446,7 +457,7 @@ class PaperYearsCountModule(MagAnalyserModule):
         """
 
         ts = release.strftime('%Y%m%d')
-        table_id = f'{MagAnalyser.PAPERS_TABLE_ID}{ts}'
+        table_id = f'{MagTableKey.TID_PAPERS}{ts}'
         sql = self._tpl_group_count.render(
             project_id=self._project_id, dataset_id=self._dataset_id, table_id=table_id,
             column='Year', where='Year IS NOT NULL'
@@ -461,22 +472,40 @@ class MagAnalyser(DataQualityAnalyser):
     BigQuery (maybe).
     """
 
-    CACHE_RELEASES = 'releases'
-    PAPERS_TABLE_ID = 'Papers'
-    FOS_TABLE_ID = 'FieldsOfStudy'
+    CACHE_FOSL0 = 'fosl0_'  # concatenated with a date string (isoformat)
+
+    ES_FOS_ID = 'field_id'
     ARG_MODULES = 'modules'
 
-    def __init__(self, project_id: str ='academic-observatory-dev', dataset_id:str='mag',
+    def __init__(self, project_id: str = 'academic-observatory-dev', dataset_id: str = 'mag',
                  modules: Union[None, List[MagAnalyserModule]] = None):
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._end_date = datetime.datetime.now(timezone.utc)
         self._cache = AutoFetchCache()
-
+        self._init_cache_fetchers()
         self._tpl_env = Environment(loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
         self._tpl_releases = self._tpl_env.get_template('select_table_suffixes.sql.jinja2')
-        self._cache.set_fetcher(MagAnalyser.CACHE_RELEASES, lambda _: self._get_releases())
+        self._tpl_select = self._tpl_env.get_template('select_table.sql.jinja2')
         self._modules = self._load_modules(modules)
+
+    def _init_cache_fetchers(self):
+        """ Initialise the auto fetchers in the cache. """
+
+        self._init_releases_fetcher()
+        self._init_fosl0_fetcher()
+
+    def _init_releases_fetcher(self):
+        """ Initialise the releases cache fetcher. """
+
+        self._cache.set_fetcher(MagCacheKey.RELEASES, lambda _: self._get_releases())
+
+    def _init_fosl0_fetcher(self):
+        """ Initialise the fields of study level 0 id/name fetcher. """
+
+        releases = self._cache[MagCacheKey.RELEASES]
+        for release in releases:
+            self._cache.set_fetcher(f'{MagCacheKey.FOSL0}{release.isoformat()}', lambda key: self._get_fosl0(key))
 
     def _load_modules(self, modules: Union[None, List[MagAnalyserModule]]) -> OrderedDict:
         """ Load the modules into an ordered dictionary for use.
@@ -526,7 +555,7 @@ class MagAnalyser(DataQualityAnalyser):
         """
 
         sql = self._tpl_releases.render(project_id=self._project_id, dataset_id=self._dataset_id,
-                                        table_id=MagAnalyser.FOS_TABLE_ID, end_date=self._end_date)
+                                        table_id=MagTableKey.TID_FOS, end_date=self._end_date)
         rel_list = list(reversed(pd.read_gbq(sql, project_id=self._project_id)['suffix']))
         releases = [release.date() for release in rel_list]
         logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
