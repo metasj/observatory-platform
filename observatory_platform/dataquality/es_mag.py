@@ -35,6 +35,8 @@ from elasticsearch_dsl import (
 )
 
 class MagPapersYearCount(Document):
+    """ Number of papers in MAG for a given year. """
+
     release = Date(required=True, default_timezone='UTC')
     year = Long(required=True)
     count = Long(required=True)
@@ -48,20 +50,21 @@ class MagPapersYearCount(Document):
 
     @classmethod
     def _matches(cls, _):
-        '''
-        MagPapersYearCount is an abstract class, make sure it never gets used for deserialization.
-        '''
+        """ MagPapersYearCount is an abstract class, make sure it never gets used for deserialization. """
 
         return False
 
     def save(self, **kwargs):
-        # if there is no date, use now
+        """ Indexes the document in elastic search. """
+
         if self.release is None:
             self.release = datetime.now()
         return super(MagPapersYearCount, self).save(**kwargs)
 
 
 class MagPapersMetrics(Document):
+    """ Some aggregate metrics for the Papers dataset in MAG. """
+
     release = Date(required=True, default_timezone='UTC')
     total = Long(required=True)
     null_year = Long(required=True)
@@ -82,19 +85,22 @@ class MagPapersMetrics(Document):
 
     @classmethod
     def _matches(cls, _):
-        '''
-        MagPapersMetrics is an abstract class, make sure it never gets used for deserialization.
-        '''
+        """MagPapersMetrics is an abstract class, make sure it never gets used for deserialization. """
 
         return False
 
     def save(self, **kwargs):
-        # if there is no date, use now
+        """ Indexes the document in elastic search. """
+
         if self.release is None:
             self.release = datetime.now()
         return super(MagPapersMetrics, self).save(**kwargs)
 
 class MagFosL0Metrics(Document):
+    """ Level 0 Fields Of Study metrics on the relative subject labels on each paper. Note that a paper can have several
+        labels.
+    """
+
     release = Date(required=True, default_timezone='UTC')
     field_ids_unchanged = Boolean(required=True)
     normalized_names_unchanged = Boolean(required=True)
@@ -111,20 +117,21 @@ class MagFosL0Metrics(Document):
 
     @classmethod
     def _matches(cls, _):
-        '''
-        MagFosL0Metrics is an abstract class, make sure it never gets used for deserialization.
-        '''
+        """ MagFosL0Metrics is an abstract class, make sure it never gets used for deserialization. """
 
         return False
 
     def save(self, **kwargs):
-        # if there is no date, use now
+        """ Indexes the document in elastic search. """
+
         if self.release is None:
             self.release = datetime.now()
         return super(MagFosL0Metrics, self).save(**kwargs)
 
 
 class MagFosL0Counts(Document):
+    """ Aggregate counts and proportions per field of study from the FieldsOfStudy dataset. """
+
     release = Date(required=True, default_timezone='UTC')
     field_id = Long(required=True)
     normalized_name = Text(required=True)
@@ -142,14 +149,13 @@ class MagFosL0Counts(Document):
 
     @classmethod
     def _matches(cls, _):
-        '''
-        MagFosL0Counts is an abstract class, make sure it never gets used for deserialization.
-        '''
+        """ MagFosL0Counts is an abstract class, make sure it never gets used for deserialization. """
 
         return False
 
     def save(self, **kwargs):
-        # if there is no date, use now
+        """ Indexes the document in elastic search. """
+
         if self.release is None:
             self.release = datetime.now()
         return super(MagFosL0Counts, self).save(**kwargs)
