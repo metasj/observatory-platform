@@ -34,6 +34,65 @@ from elasticsearch_dsl import (
     Integer,
 )
 
+class MagPapersYearCount(Document):
+    release = Date(required=True, default_timezone='UTC')
+    year = Long(required=True)
+    count = Long(required=True)
+
+    class Index:
+        name = 'dataquality-mag-papers-year'
+        settings = {
+            'number_of_shards': 2,
+            'number_of_replicas': 0
+        }
+
+    @classmethod
+    def _matches(cls, _):
+        '''
+        MagPapersYearCount is an abstract class, make sure it never gets used for deserialization.
+        '''
+
+        return False
+
+    def save(self, **kwargs):
+        # if there is no date, use now
+        if self.release is None:
+            self.release = datetime.now()
+        return super(MagPapersYearCount, self).save(**kwargs)
+
+
+class MagPapersMetrics(Document):
+    release = Date(required=True, default_timezone='UTC')
+    total = Long(required=True)
+    null_year = Long(required=True)
+    null_doi = Long(required=True)
+    null_doctype = Long(required=True)
+    null_familyid = Long(required=True)
+    pnull_year = Double(required=True)
+    pnull_doi = Double(required=True)
+    pnull_doctype = Double(required=True)
+    pnull_familyid = Double(required=True)
+
+    class Index:
+        name = 'dataquality-mag-papers-metrics'
+        settings = {
+            'number_of_shards': 2,
+            'number_of_replicas': 0
+        }
+
+    @classmethod
+    def _matches(cls, _):
+        '''
+        MagPapersMetrics is an abstract class, make sure it never gets used for deserialization.
+        '''
+
+        return False
+
+    def save(self, **kwargs):
+        # if there is no date, use now
+        if self.release is None:
+            self.release = datetime.now()
+        return super(MagPapersMetrics, self).save(**kwargs)
 
 class MagFosL0Metrics(Document):
     release = Date(required=True, default_timezone='UTC')
@@ -53,7 +112,7 @@ class MagFosL0Metrics(Document):
     @classmethod
     def _matches(cls, _):
         '''
-        MagReleaseEs is an abstract class, make sure it never gets used for deserialization.
+        MagFosL0Metrics is an abstract class, make sure it never gets used for deserialization.
         '''
 
         return False
@@ -84,7 +143,7 @@ class MagFosL0Counts(Document):
     @classmethod
     def _matches(cls, _):
         '''
-        MagReleaseEs is an abstract class, make sure it never gets used for deserialization.
+        MagFosL0Counts is an abstract class, make sure it never gets used for deserialization.
         '''
 
         return False
@@ -94,3 +153,4 @@ class MagFosL0Counts(Document):
         if self.release is None:
             self.release = datetime.now()
         return super(MagFosL0Counts, self).save(**kwargs)
+

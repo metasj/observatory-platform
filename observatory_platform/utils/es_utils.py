@@ -24,6 +24,19 @@ from elasticsearch.helpers import bulk
 from typing import Union, List
 
 
+def init_doc(es_doc: IndexMeta):
+    """ Initialise the mappings in elastic search if the document doesn't exist. Will not reinitialise if a mapping
+    already exists.
+
+    @param es_doc: Document to initialise.
+    """
+
+    try:
+        Search(index=es_doc.Index.name).count()
+    except NotFoundError:
+        es_doc.init()
+
+
 def get_or_init_doc_count(es_doc: IndexMeta) -> int:
     """ Get the number of documents stored in elastic search.  If the index doesn't exist, create it.
     @param es_doc: IndexMeta class for the document we want to check.
@@ -56,6 +69,15 @@ def delete_index(index: str):
 
     Index(index).delete()
 
+
+def search_count_by_release(index: str, release: str):
+    """ Get the number of documents found in an index for a release.
+    @param index: Document index name.
+    @param release: Release date.
+    @return: Number of documents found.
+    """
+
+    return Search(index=index).query('match', release=release).count()
 
 def search_by_release(index: str, release: str, sort_field: Union[None, str] = None):
     """ Search elastic search index for a particular release document.
