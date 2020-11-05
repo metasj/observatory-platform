@@ -79,6 +79,7 @@ def search_count_by_release(index: str, release: str):
 
     return Search(index=index).query('match', release=release).count()
 
+
 def search_by_release(index: str, release: str, sort_field: Union[None, str] = None):
     """ Search elastic search index for a particular release document.
     @param index: Document index name.
@@ -91,6 +92,7 @@ def search_by_release(index: str, release: str, sort_field: Union[None, str] = N
     if sort_field:
         s = s.sort(sort_field)
     return list(s.scan())
+
 
 def bulk_index(docs: List[Document]):
     """ Perform a batched index on a list of documents in elastic search.

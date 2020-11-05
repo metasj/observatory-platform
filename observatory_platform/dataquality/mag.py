@@ -29,7 +29,7 @@ from datetime import timezone
 from google.oauth2 import service_account
 from jinja2 import Environment, PackageLoader
 from scipy.spatial.distance import jensenshannon
-from typing import Union, Any, List, Hashable
+from typing import Union, Any, List, Hashable, Tuple
 
 from elasticsearch import NotFoundError
 from elasticsearch_dsl.document import IndexMeta
@@ -83,7 +83,7 @@ credentials = pydata_google_auth.get_user_credentials(
 
 class MagAnalyserModule(ABC):
     """
-    Analysis module for the MAG analyser.
+    Analysis module interface for the MAG analyser.
     """
 
     @classmethod
@@ -97,6 +97,7 @@ class MagAnalyserModule(ABC):
         """ Get the name of the module.
         @return: Name of the module.
         """
+
         raise NotImplementedError
 
     @abstractmethod
@@ -105,6 +106,7 @@ class MagAnalyserModule(ABC):
         Run the analyser.
         @param kwargs: Optional key value arguments to pass into an analyser. See individual analyser documentation.
         """
+
         raise NotImplementedError
 
 
@@ -119,7 +121,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
     BQ_FOS_ID = 'FieldOfStudyId'
     ES_FOS_ID = 'field_id'
 
-    def __init__(self, project_id, dataset_id, cache):
+    def __init__(self, project_id: str, dataset_id: str, cache):
         """ Initialise the module.
         @param project_id: Project ID in BigQuery.
         @param dataset_id: Dataset ID in BigQuery.
@@ -145,7 +147,9 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         return 'FieldsOfStudyLevel0Module'
 
     def run(self, **kwargs):
-        """ Run this module. """
+        """ Run this module.
+        @param kwargs: Not used.
+        """
 
         releases = self._cache[MagAnalyser.CACHE_RELEASES]
         num_releases = len(releases)
@@ -170,10 +174,17 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         # Construct elastic search documents
         docs = self._construct_es_docs(releases, previous_counts)
 
-        # Bulk document index on ElasticSearch
+        # Save documents in ElasticSearch
         bulk_index(docs)
 
     def _construct_es_docs(self, releases: List[datetime.date], previous_counts: DataFrame) -> List[Document]:
+        """
+        Calculate metrics and construct elastic search documents.
+        @param releases: List of MAG release dates.
+        @param previous_counts: Count information from the previous release.
+        @return: List of elastic search documents representing the computed metrics.
+        """
+
         docs = list()
         for i in range(self._num_es_counts, len(releases)):
             release = releases[i]
@@ -212,7 +223,16 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         return docs
 
     @staticmethod
-    def _construct_es_counts(release, current_counts, dppaper, dpcitations):
+    def _construct_es_counts(release: datetime.date, current_counts: DataFrame, dppaper: DataFrame,
+                             dpcitations: DataFrame) -> List[MagFosL0Counts]:
+        """ Constructs the MagFosL0Counts documents.
+        @param release: MAG release date we are generating a document for.
+        @param current_counts: Counts for the current release.
+        @param dppaper: Difference of proportions for the paper count between current and last release.
+        @param dpcitations: Difference of proportions for the citation count between current and last release.
+        @return: List of MagFosL0Counts documents.
+        """
+
         docs = list()
         for i in range(len(current_counts[FieldsOfStudyLevel0Module.BQ_PAPER_COUNT])):
             fosl0_counts = MagFosL0Counts(release=release)
@@ -228,7 +248,17 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         return docs
 
     @staticmethod
-    def _construct_es_metrics(release, current_counts, previous_counts, id_unchanged, normalized_unchanged):
+    def _construct_es_metrics(release: datetime.date, current_counts: DataFrame, previous_counts: DataFrame,
+                              id_unchanged: bool, normalized_unchanged: bool) -> MagFosL0Metrics:
+        """ Constructs the MagFosL0Metrics documents.
+        @param release: MAG release date we are generating a document for.
+        @param current_counts: Counts for the current release.
+        @param current_counts: Counts for the previous release.
+        @param id_unchanged: boolean indicating whether the id has changed between releases.
+        @param normalized_unchanged: boolean indicating whether the normalized names have changed between releases.
+        @return: MagFosL0Metrics document.
+        """
+
         metrics = MagFosL0Metrics(release=release)
         metrics.field_ids_unchanged = id_unchanged
         metrics.normalized_names_unchanged = normalized_unchanged
@@ -241,6 +271,12 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         return metrics
 
     def _get_bq_counts(self, release: datetime.date) -> DataFrame:
+        """
+        Get the count information from BigQuery table.
+        @param release: Release to pull data from.
+        @return: Count information.
+        """
+
         ts = release.strftime('%Y%m%d')
         table_id = f'{MagAnalyser.FOS_TABLE_ID}{ts}'
         sql = self._tpl_select.render(
@@ -254,6 +290,11 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
 
     @staticmethod
     def _get_es_counts(release: str) -> Union[None, DataFrame]:
+        """ Retrieve the MagFosL0Counts documents already indexed in elastic search for a given release.
+        @param release: Relevant release date.
+        @return Retrieved count information.
+        """
+
         hits = search_by_release(MagFosL0Counts.Index.name, release, 'field_id')
 
         # Something went wrong with ES records. Delete existing and recompute them.
@@ -279,7 +320,7 @@ class PaperMetricsModule(MagAnalyserModule):
     BQ_FAMILY_ID = 'FamilyId'
     BQ_DOC_TYPE = 'DocType'
 
-    def __init__(self, project_id, dataset_id, cache):
+    def __init__(self, project_id: str, dataset_id: str, cache):
         """ Initialise the module.
         @param project_id: Project ID in BigQuery.
         @param dataset_id: Dataset ID in BigQuery.
@@ -299,9 +340,14 @@ class PaperMetricsModule(MagAnalyserModule):
         """ Get the module name.
         @return: Module name.
         """
+
         return 'PaperMetricsModule'
 
     def run(self, **kwargs):
+        """ Run the module.
+        @param kwargs: Unused.
+        """
+
         eps = 1e-9
         releases = self._cache[MagAnalyser.CACHE_RELEASES]
         num_releases = len(releases)
@@ -331,7 +377,12 @@ class PaperMetricsModule(MagAnalyserModule):
         if len(docs) > 0:
             bulk_index(docs)
 
-    def _get_paper_null_counts(self, release):
+    def _get_paper_null_counts(self, release: datetime.date) -> DataFrame:
+        """ Get the null counts of some Papers fields for a given release.
+        @param release: Release date.
+        @return Null count information.
+        """
+
         ts = release.strftime('%Y%m%d')
         table_id = f'{MagAnalyser.PAPERS_TABLE_ID}{ts}'
         sql = self._tpl_null_count.render(
@@ -345,7 +396,7 @@ class PaperMetricsModule(MagAnalyserModule):
 class PaperYearsCountModule(MagAnalyserModule):
     """ MagAnalyser module to compute paper counts by year from MAG. """
 
-    def __init__(self, project_id, dataset_id, cache):
+    def __init__(self, project_id: str, dataset_id: str, cache):
         """ Initialise the module.
         @param project_id: Project ID in BigQuery.
         @param dataset_id: Dataset ID in BigQuery.
@@ -368,6 +419,10 @@ class PaperYearsCountModule(MagAnalyserModule):
         return 'PaperYearsCountModule'
 
     def run(self, **kwargs):
+        """ Run the module.
+        @param kwargs: Unused.
+        """
+
         releases = self._cache[MagAnalyser.CACHE_RELEASES]
         num_releases = len(releases)
 
@@ -384,7 +439,12 @@ class PaperYearsCountModule(MagAnalyserModule):
         if len(docs) > 0:
             bulk_index(docs)
 
-    def _get_paper_year_count(self, release):
+    def _get_paper_year_count(self, release: datetime.date) -> Tuple[List[int], List[int]]:
+        """ Get paper counts by year.
+        @param release: Relevant release to get data for.
+        @return: Tuple of year and count information.
+        """
+
         ts = release.strftime('%Y%m%d')
         table_id = f'{MagAnalyser.PAPERS_TABLE_ID}{ts}'
         sql = self._tpl_group_count.render(
@@ -406,7 +466,7 @@ class MagAnalyser(DataQualityAnalyser):
     FOS_TABLE_ID = 'FieldsOfStudy'
     ARG_MODULES = 'modules'
 
-    def __init__(self, project_id='academic-observatory-dev', dataset_id='mag',
+    def __init__(self, project_id: str ='academic-observatory-dev', dataset_id:str='mag',
                  modules: Union[None, List[MagAnalyserModule]] = None):
         self._project_id = project_id
         self._dataset_id = dataset_id
@@ -418,8 +478,11 @@ class MagAnalyser(DataQualityAnalyser):
         self._cache.set_fetcher(MagAnalyser.CACHE_RELEASES, lambda _: self._get_releases())
         self._modules = self._load_modules(modules)
 
-    def _load_modules(self, modules: Union[None, List[MagAnalyserModule]]):
-        """ Load the modules into an ordered dictionary for use. """
+    def _load_modules(self, modules: Union[None, List[MagAnalyserModule]]) -> OrderedDict:
+        """ Load the modules into an ordered dictionary for use.
+        @param modules: None or a list of modules you want to load into an ordered dictionary of modules.
+        @return: Ordered dictionary of modules.
+        """
 
         mods = OrderedDict()
         # Override with user supplied list.
@@ -458,6 +521,10 @@ class MagAnalyser(DataQualityAnalyser):
             module.run()
 
     def _get_releases(self) -> List[datetime.date]:
+        """ Get the list of MAG releases from BigQuery.
+        @return: List of MAG release dates sorted in ascending order.
+        """
+
         sql = self._tpl_releases.render(project_id=self._project_id, dataset_id=self._dataset_id,
                                         table_id=MagAnalyser.FOS_TABLE_ID, end_date=self._end_date)
         rel_list = list(reversed(pd.read_gbq(sql, project_id=self._project_id)['suffix']))

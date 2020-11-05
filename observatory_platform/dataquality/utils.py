@@ -19,13 +19,13 @@
 import pandas as pd
 import numpy as np
 
+
 def proportion_delta(latest, previous):
     """ Computes proportional difference.
     @param latest: Latest data.
     @param previous: Previous data.
     @return: Proportional difference.
     """
-
 
     # If one of them is a DataFrame, we require both of them to be
     if isinstance(latest, pd.DataFrame):

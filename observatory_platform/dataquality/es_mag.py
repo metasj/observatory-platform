@@ -34,6 +34,7 @@ from elasticsearch_dsl import (
     Integer,
 )
 
+
 class MagPapersYearCount(Document):
     """ Number of papers in MAG for a given year. """
 
@@ -95,6 +96,7 @@ class MagPapersMetrics(Document):
         if self.release is None:
             self.release = datetime.now()
         return super(MagPapersMetrics, self).save(**kwargs)
+
 
 class MagFosL0Metrics(Document):
     """ Level 0 Fields Of Study metrics on the relative subject labels on each paper. Note that a paper can have several
@@ -159,4 +161,3 @@ class MagFosL0Counts(Document):
         if self.release is None:
             self.release = datetime.now()
         return super(MagFosL0Counts, self).save(**kwargs)
-
