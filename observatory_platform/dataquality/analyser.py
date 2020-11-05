@@ -22,7 +22,8 @@ class DataQualityAnalyser(ABC):
 
     @classmethod
     def __subclasshook__(cls, subclass):
-        return (hasattr(subclass, 'run') and callable(subclass.run)
+        return (hasattr(subclass, 'run') and callable(subclass.run) and
+                hasattr(subclass, 'erase') and callable(subclass.erase)
                 or NotImplemented)
 
     @abstractmethod
@@ -32,5 +33,13 @@ class DataQualityAnalyser(ABC):
         @param kwargs: Optional key value arguments to pass into an analyser. See individual analyser documentation.
         """
         raise NotImplementedError
-        pass
 
+    @abstractmethod
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by all modules in the analyser.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Unused.
+        """
+
+        raise NotImplementedError

@@ -88,8 +88,9 @@ class MagAnalyserModule(ABC):
 
     @classmethod
     def __subclasshook__(cls, subclass):
-        return (hasattr(subclass, 'run') and callable(subclass.run)
-                and hasattr(subclass, 'name') and callable(subclass.name)
+        return (hasattr(subclass, 'run') and callable(subclass.run) and
+                hasattr(subclass, 'name') and callable(subclass.name) and
+                hasattr(subclass, 'erase') and callable(subclass.erase)
                 or NotImplemented)
 
     @abstractmethod
@@ -109,17 +110,27 @@ class MagAnalyserModule(ABC):
 
         raise NotImplementedError
 
+    @abstractmethod
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by the module and possibly delete the index.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Optional key value arguments to pass into an analyser. See individual analyser documentation.
+        """
+
+        raise NotImplementedError
+
 
 class MagCacheKey:
     """ Cache key names """
-    
+
     RELEASES = 'releases'
     FOSL0 = 'fosl0_'  # concatenated with a date string (%Y%m%d)
 
 
 class MagTableKey:
     """ BQ table and column names. """
-    
+
     TID_PAPERS = 'Papers'
     TID_FOS = 'FieldsOfStudy'
 
@@ -133,6 +144,7 @@ class MagTableKey:
     COL_TOTAL = 'total'
     COL_FAMILY_ID = 'FamilyId'
     COL_DOC_TYPE = 'DocType'
+
 
 class FieldsOfStudyLevel0Module(MagAnalyserModule):
     """ MagAnalyser module to compute a profile on the MAG Level 0 FieldsOfStudy information. """
@@ -185,8 +197,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
             if previous_counts is None:
                 logging.warning('Inconsistent records found in elastic search. Recalculating all releases.')
                 self._num_es_counts = 0
-                clear_index(MagFosL0Metrics.Index.name)
-                clear_index(MagFosL0Counts.Index.name)
+                self.erase()
                 previous_counts = self._get_bq_counts(releases[0])
 
         # Construct elastic search documents
@@ -194,6 +205,20 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
 
         # Save documents in ElasticSearch
         bulk_index(docs)
+
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by the module and delete the index.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Unused.
+        """
+
+        clear_index(MagFosL0Metrics.Index.name)
+        clear_index(MagFosL0Counts.Index.name)
+
+        if index:
+            delete_index(MagFosL0Metrics.Index.name)
+            delete_index(MagFosL0Counts.Index.name)
 
     def _construct_es_docs(self, releases: List[datetime.date], previous_counts: DataFrame) -> List[Document]:
         """
@@ -215,7 +240,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
             id_unchanged = curr_fosid == prev_fosid
             normalized_unchanged = curr_fosname == prev_fosname
 
-            ts = release.isoformat()
+            ts = release.strftime('%Y%m%d')
             self._cache[f'{MagCacheKey.FOSL0}{ts}'] = list(zip(curr_fosid, curr_fosname))
 
             dppaper = None
@@ -388,6 +413,18 @@ class PaperMetricsModule(MagAnalyserModule):
         if len(docs) > 0:
             bulk_index(docs)
 
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by the module and delete the index.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Unused.
+        """
+
+        clear_index(MagPapersMetrics.Index.name)
+
+        if index:
+            delete_index(MagPapersMetrics.Index.name)
+
     def _get_paper_null_counts(self, release: datetime.date) -> DataFrame:
         """ Get the null counts of some Papers fields for a given release.
         @param release: Release date.
@@ -450,6 +487,18 @@ class PaperYearsCountModule(MagAnalyserModule):
         if len(docs) > 0:
             bulk_index(docs)
 
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by the module and delete the index.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Unused.
+        """
+
+        clear_index(MagPapersYearCount.Index.name)
+
+        if index:
+            delete_index(MagPapersYearCount.Index.name)
+
     def _get_paper_year_count(self, release: datetime.date) -> Tuple[List[int], List[int]]:
         """ Get paper counts by year.
         @param release: Relevant release to get data for.
@@ -473,7 +522,6 @@ class MagAnalyser(DataQualityAnalyser):
     """
 
     CACHE_FOSL0 = 'fosl0_'  # concatenated with a date string (isoformat)
-
     ES_FOS_ID = 'field_id'
     ARG_MODULES = 'modules'
 
@@ -505,7 +553,8 @@ class MagAnalyser(DataQualityAnalyser):
 
         releases = self._cache[MagCacheKey.RELEASES]
         for release in releases:
-            self._cache.set_fetcher(f'{MagCacheKey.FOSL0}{release.isoformat()}', lambda key: self._get_fosl0(key))
+            ts = release.strftime('%Y%m%d')
+            self._cache.set_fetcher(f'{MagCacheKey.FOSL0}{ts}', lambda key: self._get_fosl0(key))
 
     def _load_modules(self, modules: Union[None, List[MagAnalyserModule]]) -> OrderedDict:
         """ Load the modules into an ordered dictionary for use.
@@ -549,6 +598,17 @@ class MagAnalyser(DataQualityAnalyser):
         for module in modules.values():
             module.run()
 
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by all modules in the analyser.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Unused.
+        """
+
+        for module in self._modules.values():
+            module.erase(index)
+
+
     def _get_releases(self) -> List[datetime.date]:
         """ Get the list of MAG releases from BigQuery.
         @return: List of MAG release dates sorted in ascending order.
@@ -560,3 +620,23 @@ class MagAnalyser(DataQualityAnalyser):
         releases = [release.date() for release in rel_list]
         logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
         return releases
+
+    def _get_fosl0(self, key) -> List[Tuple[int, str]]:
+        """ Get the level 0 fields of study for a given MAG release from BigQuery.
+        @param key: Key used to access cache. Suffix is release date.
+        @return: Tuple of (id, name) for each level 0 field of study.
+        """
+
+        datestr = key[key.find('_') + 1:]
+        date = datetime.datetime.strptime(datestr, '%Y-%m-%d').date()
+        table_suffix = date.strftime('%Y%m%d')
+        sql = self._tpl_select.render(project_id=self._project_id, dataset_id=self._dataset_id,
+                                      table_id=f'{MagTableKey.TID_FOS}{table_suffix}',
+                                      columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME], where='Level = 0',
+                                      order_by=MagTableKey.COL_FOS_ID)
+
+        df = pd.read_gbq(sql, project_id=self._project_id)
+        ids = df[MagTableKey.COL_FOS_ID].to_list()
+        names = df[MagTableKey.COL_NORM_NAME].to_list()
+
+        return list(zip(ids, names))
