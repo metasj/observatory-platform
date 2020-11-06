@@ -35,6 +35,36 @@ from elasticsearch_dsl import (
 )
 
 
+class MagPapersFieldYearCount(Document):
+    """ Number of papers per field per year. """
+
+    release = Date(required=True, default_timezone='UTC')
+    field_name = Text(required=True)
+    field_id = Long(required=True)
+    year = Long(required=True)
+    count = Long(required=True)
+
+    class Index:
+        name = 'dataquality-mag-papers-field-year'
+        settings = {
+            'number_of_shards': 2,
+            'number_of_replicas': 0
+        }
+
+    @classmethod
+    def _matches(cls, _):
+        """ This is an abstract class. Never use it for deserialization. """
+
+        return False
+
+    def save(self, **kwargs):
+        """ Indexes the document in elastic search. """
+
+        if self.release is None:
+            self.release = datetime.now()
+        return super().save(**kwargs)
+
+
 class MagPapersYearCount(Document):
     """ Number of papers in MAG for a given year. """
 
@@ -60,7 +90,7 @@ class MagPapersYearCount(Document):
 
         if self.release is None:
             self.release = datetime.now()
-        return super(MagPapersYearCount, self).save(**kwargs)
+        return super().save(**kwargs)
 
 
 class MagPapersMetrics(Document):
@@ -95,7 +125,7 @@ class MagPapersMetrics(Document):
 
         if self.release is None:
             self.release = datetime.now()
-        return super(MagPapersMetrics, self).save(**kwargs)
+        return super().save(**kwargs)
 
 
 class MagFosL0Metrics(Document):
@@ -128,7 +158,7 @@ class MagFosL0Metrics(Document):
 
         if self.release is None:
             self.release = datetime.now()
-        return super(MagFosL0Metrics, self).save(**kwargs)
+        return super().save(**kwargs)
 
 
 class MagFosL0Counts(Document):
@@ -160,4 +190,4 @@ class MagFosL0Counts(Document):
 
         if self.release is None:
             self.release = datetime.now()
-        return super(MagFosL0Counts, self).save(**kwargs)
+        return super().save(**kwargs)

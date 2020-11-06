@@ -29,7 +29,7 @@ from datetime import timezone
 from google.oauth2 import service_account
 from jinja2 import Environment, PackageLoader
 from scipy.spatial.distance import jensenshannon
-from typing import Union, Any, List, Hashable, Tuple
+from typing import Union, Any, List, Hashable, Tuple, Iterator
 
 from elasticsearch import NotFoundError
 from elasticsearch_dsl.document import IndexMeta
@@ -49,6 +49,7 @@ from observatory_platform.dataquality.es_mag import (
     MagFosL0Counts,
     MagPapersMetrics,
     MagPapersYearCount,
+    MagPapersFieldYearCount,
 )
 
 from observatory_platform.dataquality.utils import (
@@ -94,14 +95,6 @@ class MagAnalyserModule(ABC):
                 or NotImplemented)
 
     @abstractmethod
-    def name(self) -> str:
-        """ Get the name of the module.
-        @return: Name of the module.
-        """
-
-        raise NotImplementedError
-
-    @abstractmethod
     def run(self, **kwargs):
         """
         Run the analyser.
@@ -119,6 +112,13 @@ class MagAnalyserModule(ABC):
         """
 
         raise NotImplementedError
+
+    def name(self) -> str:
+        """ Get the name of the module.
+        @return: Name of the module.
+        """
+
+        return self.__class__.__name__
 
 
 class MagCacheKey:
@@ -158,6 +158,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         @param cache: Analyser cache to use.
         """
 
+        logging.info(f'Initialising {self.name()}')
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._cache = cache
@@ -169,18 +170,12 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         self._num_es_metrics = get_or_init_doc_count(MagFosL0Metrics)
         self._num_es_counts = get_or_init_doc_count(MagFosL0Counts)
 
-    def name(self) -> str:
-        """ Get the name of the module.
-        @return: Name of the module.
-        """
-
-        return 'FieldsOfStudyLevel0Module'
-
     def run(self, **kwargs):
         """ Run this module.
         @param kwargs: Not used.
         """
 
+        logging.info(f'Running {self.name()}')
         releases = self._cache[MagCacheKey.RELEASES]
         num_releases = len(releases)
 
@@ -213,12 +208,12 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         @param kwargs: Unused.
         """
 
-        clear_index(MagFosL0Metrics.Index.name)
-        clear_index(MagFosL0Counts.Index.name)
+        clear_index(MagFosL0Metrics)
+        clear_index(MagFosL0Counts)
 
         if index:
-            delete_index(MagFosL0Metrics.Index.name)
-            delete_index(MagFosL0Counts.Index.name)
+            delete_index(MagFosL0Metrics)
+            delete_index(MagFosL0Counts)
 
     def _construct_es_docs(self, releases: List[datetime.date], previous_counts: DataFrame) -> List[Document]:
         """
@@ -253,11 +248,13 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
 
             # Populate counts
             counts = FieldsOfStudyLevel0Module._construct_es_counts(releases[i], current_counts, dppaper, dpcitations)
+            logging.info(f'Constructed {len(counts)} MagFosL0Counts documents.')
             docs.extend(counts)
 
             # Populate metrics
             metrics = FieldsOfStudyLevel0Module._construct_es_metrics(releases[i], current_counts, previous_counts,
                                                                       id_unchanged, normalized_unchanged)
+            logging.info(f'Constructed 1 MagFosL0Metrics document.')
             docs.append(metrics)
 
             # Loop maintenance
@@ -337,7 +334,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         @return Retrieved count information.
         """
 
-        hits = search_by_release(MagFosL0Counts.Index.name, release, 'field_id')
+        hits = search_by_release(MagFosL0Counts, release, 'field_id')
 
         # Something went wrong with ES records. Delete existing and recompute them.
         if len(hits) == 0:
@@ -364,6 +361,7 @@ class PaperMetricsModule(MagAnalyserModule):
         @param cache: Analyser cache to use.
         """
 
+        logging.info(f'Initialising {self.name()}')
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._cache = cache
@@ -372,18 +370,12 @@ class PaperMetricsModule(MagAnalyserModule):
         self._tpl_env = Environment(loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
         self._tpl_null_count = self._tpl_env.get_template('null_count.sql.jinja2')
 
-    def name(self) -> str:
-        """ Get the module name.
-        @return: Module name.
-        """
-
-        return 'PaperMetricsModule'
-
     def run(self, **kwargs):
         """ Run the module.
         @param kwargs: Unused.
         """
 
+        logging.info(f'Running {self.name()}')
         eps = 1e-9
         releases = self._cache[MagCacheKey.RELEASES]
         num_releases = len(releases)
@@ -393,7 +385,7 @@ class PaperMetricsModule(MagAnalyserModule):
 
         docs = list()
         for i in range(self._es_count, num_releases):
-            if search_count_by_release(MagPapersMetrics.Index.name, releases[i]) > 0:
+            if search_count_by_release(MagPapersMetrics, releases[i]) > 0:
                 continue
             null_metrics = self._get_paper_null_counts(releases[i])
             es_paper_metrics = MagPapersMetrics(release=releases[i].isoformat())
@@ -410,6 +402,8 @@ class PaperMetricsModule(MagAnalyserModule):
             es_paper_metrics.pnull_familyid = es_paper_metrics.null_familyid / es_paper_metrics.total
             docs.append(es_paper_metrics)
 
+        logging.info(f'Constructed {len(docs)} MagPapersMetrics documents.')
+
         if len(docs) > 0:
             bulk_index(docs)
 
@@ -420,10 +414,10 @@ class PaperMetricsModule(MagAnalyserModule):
         @param kwargs: Unused.
         """
 
-        clear_index(MagPapersMetrics.Index.name)
+        clear_index(MagPapersMetrics)
 
         if index:
-            delete_index(MagPapersMetrics.Index.name)
+            delete_index(MagPapersMetrics)
 
     def _get_paper_null_counts(self, release: datetime.date) -> DataFrame:
         """ Get the null counts of some Papers fields for a given release.
@@ -452,6 +446,7 @@ class PaperYearsCountModule(MagAnalyserModule):
         @param cache: Analyser cache to use.
         """
 
+        logging.info(f'Initialising {self.name()}')
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._cache = cache
@@ -460,29 +455,26 @@ class PaperYearsCountModule(MagAnalyserModule):
         self._tpl_group_count = self._tpl_env.get_template('group_count.sql.jinja2')
         init_doc(MagPapersYearCount)
 
-    def name(self) -> str:
-        """ Get the module name.
-        @return: Module name.
-        """
-        return 'PaperYearsCountModule'
-
     def run(self, **kwargs):
         """ Run the module.
         @param kwargs: Unused.
         """
 
+        logging.info(f'Running {self.name()}')
         releases = self._cache[MagCacheKey.RELEASES]
         num_releases = len(releases)
 
         docs = list()
         for i in range(num_releases):
-            if search_count_by_release(MagPapersYearCount.Index.name, releases[i]) > 0:
+            if search_count_by_release(MagPapersYearCount, releases[i]) > 0:
                 continue
             year, counts = self._get_paper_year_count(releases[i])
 
             for j in range(len(year)):
                 paper_count = MagPapersYearCount(release=releases[i].isoformat(), year=year[j], count=counts[j])
                 docs.append(paper_count)
+
+        logging.info(f'Constructed {len(docs)} MagPapersYearCount documents.')
 
         if len(docs) > 0:
             bulk_index(docs)
@@ -494,10 +486,10 @@ class PaperYearsCountModule(MagAnalyserModule):
         @param kwargs: Unused.
         """
 
-        clear_index(MagPapersYearCount.Index.name)
+        clear_index(MagPapersYearCount)
 
         if index:
-            delete_index(MagPapersYearCount.Index.name)
+            delete_index(MagPapersYearCount)
 
     def _get_paper_year_count(self, release: datetime.date) -> Tuple[List[int], List[int]]:
         """ Get paper counts by year.
@@ -515,26 +507,104 @@ class PaperYearsCountModule(MagAnalyserModule):
         return df['Year'].to_list(), df['count'].to_list()
 
 
+class PapersFieldYearCountModule(MagAnalyserModule):
+    """
+    MagAnalyser module to compute the paper counts per field per year.
+    """
+
+    def __init__(self, project_id: str, dataset_id: str, cache):
+        """ Initialise the module.
+        @param project_id: Project ID in BigQuery.
+        @param dataset_id: Dataset ID in BigQuery.
+        @param templates: Jinja templates used for MAG Analyser.
+        @param cache: Analyser cache to use.
+        """
+
+        logging.info(f'Initialising {self.name()}')
+        self._project_id = project_id
+        self._dataset_id = dataset_id
+        self._cache = cache
+
+        self._tpl_env = Environment(loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+        self._tpl_count_per_field = self._tpl_env.get_template('mag_fos_count_perfield.sql.jinja2')
+        init_doc(MagPapersFieldYearCount)
+
+    def run(self, **kwargs):
+        """ Run the module.
+        @param kwargs: Unused.
+        """
+
+        logging.info(f'Running {self.name()}')
+        releases = self._cache[MagCacheKey.RELEASES]
+
+        docs = list()
+        for release in releases:
+            if search_count_by_release(MagPapersFieldYearCount, release.isoformat()) > 0:
+                continue
+            ts = release.strftime('%Y%m%d')
+            fos_ids = self._cache[f'{MagCacheKey.FOSL0}{ts}']
+
+            for id, name in fos_ids:
+                year_count = self._get_year_counts(id, ts)
+
+                for year, count in year_count:
+                    doc = MagPapersFieldYearCount(release=release.isoformat(), field_name=name, field_id=id, year=year, count=count)
+                    docs.append(doc)
+
+        logging.info(f'Constructed {len(docs)} MagPapersFieldYearCount documents.')
+
+        if len(docs) > 0:
+            bulk_index(docs)
+
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by the module and delete the index.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Unused.
+        """
+
+        clear_index(MagPapersFieldYearCount)
+
+        if index:
+            delete_index(MagPapersFieldYearCount)
+
+    def _get_year_counts(self, id: int, ts: str) -> Iterator[Tuple[int, int]]:
+        """ Get the paper counts per field per year for each level 0 field of study.
+        @param id: FieldOfStudy id to pull data for.
+        @param ts: timestamp to use as a suffix for the table id.
+        @return: zip(year, count) information.
+        """
+
+        sql = self._tpl_count_per_field.render(project_id=self._project_id, dataset_id=self._dataset_id, release=ts,
+                                               fos_id=id)
+        df = pd.read_gbq(sql, project_id=self._project_id)
+        return zip(df['Year'].to_list(), df['count'].to_list())
+
+
 class MagAnalyser(DataQualityAnalyser):
     """
     Perform data quality analysis on a Microsoft Academic Graph release, and save the results to ElasticSearch and
     BigQuery (maybe).
     """
 
-    CACHE_FOSL0 = 'fosl0_'  # concatenated with a date string (isoformat)
     ES_FOS_ID = 'field_id'
     ARG_MODULES = 'modules'
 
     def __init__(self, project_id: str = 'academic-observatory-dev', dataset_id: str = 'mag',
                  modules: Union[None, List[MagAnalyserModule]] = None):
+
+        logging.info('Initialising MagAnalyser')
+
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._end_date = datetime.datetime.now(timezone.utc)
-        self._cache = AutoFetchCache()
-        self._init_cache_fetchers()
+
         self._tpl_env = Environment(loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
         self._tpl_releases = self._tpl_env.get_template('select_table_suffixes.sql.jinja2')
         self._tpl_select = self._tpl_env.get_template('select_table.sql.jinja2')
+
+        self._cache = AutoFetchCache()
+        self._init_cache_fetchers()
         self._modules = self._load_modules(modules)
 
     def _init_cache_fetchers(self):
@@ -590,6 +660,7 @@ class MagAnalyser(DataQualityAnalyser):
         modules=list() a list of module names to run in order.
         """
 
+        logging.info('Running MagAnalyserModule modules.')
         modules = self._modules
 
         if MagAnalyser.ARG_MODULES in kwargs:
@@ -607,7 +678,6 @@ class MagAnalyser(DataQualityAnalyser):
 
         for module in self._modules.values():
             module.erase(index)
-
 
     def _get_releases(self) -> List[datetime.date]:
         """ Get the list of MAG releases from BigQuery.
@@ -627,9 +697,7 @@ class MagAnalyser(DataQualityAnalyser):
         @return: Tuple of (id, name) for each level 0 field of study.
         """
 
-        datestr = key[key.find('_') + 1:]
-        date = datetime.datetime.strptime(datestr, '%Y-%m-%d').date()
-        table_suffix = date.strftime('%Y%m%d')
+        table_suffix = key[key.find('_') + 1:]
         sql = self._tpl_select.render(project_id=self._project_id, dataset_id=self._dataset_id,
                                       table_id=f'{MagTableKey.TID_FOS}{table_suffix}',
                                       columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME], where='Level = 0',

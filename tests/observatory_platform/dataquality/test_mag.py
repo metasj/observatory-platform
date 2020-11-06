@@ -28,6 +28,7 @@ from observatory_platform.dataquality.mag import (
     FieldsOfStudyLevel0Module,
     PaperYearsCountModule,
     PaperMetricsModule,
+    PapersFieldYearCountModule,
     MagAnalyser,
     MagAnalyserModule,
     MagTableKey,
@@ -40,10 +41,10 @@ class TestMagAnalyser(unittest.TestCase):
         super().__init__(*args, **kwargs)
 
     class MockModule(MagAnalyserModule):
-        def name(self):
-            return 'MockModule'
-
         def run(self, **kwargs):
+            pass
+
+        def erase(self, **kwargs):
             pass
 
     @patch('observatory_platform.dataquality.mag.MagAnalyser._init_cache_fetchers')
@@ -438,3 +439,39 @@ class TestPaperMetricsModule(unittest.TestCase):
                     self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][0].pnull_doi, 0.1)
                     self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][0].pnull_doctype, 0.1)
                     self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][0].pnull_familyid, 0.4)
+
+
+class TestPapersFieldYearCountModule(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache = AutoFetchCache(2)
+
+    @patch('observatory_platform.dataquality.mag.init_doc')
+    def test_get_year_counts(self, _):
+        mock_response = pd.DataFrame({'Year': [1,2,3], 'count': [2,2,0]})
+        module = PapersFieldYearCountModule('project_id', 'dataset_id', self.cache)
+        with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response):
+            year_count = module._get_year_counts(1, 'testdate')
+            year_count = list(year_count)
+            self.assertEqual(len(year_count), 3)
+            self.assertEqual(year_count[0][0], 1)
+            self.assertEqual(year_count[0][1], 2)
+
+    @patch('observatory_platform.dataquality.mag.init_doc')
+    def test_run(self, _):
+        module = PapersFieldYearCountModule('project_id', 'dataset_id', self.cache)
+        module._cache[MagCacheKey.RELEASES] = [datetime.date(1990,1,1)]
+        module._cache[f'{MagCacheKey.FOSL0}19900101'] = [(1, 'testname')]
+        with patch('observatory_platform.dataquality.mag.search_count_by_release', return_value=0):
+            mock_response = pd.DataFrame({'Year': [1, 2, 3], 'count': [2, 2, 0]})
+            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response):
+                with patch('observatory_platform.dataquality.mag.bulk_index', return_value=mock_response) as mock_bulk:
+                    module.run()
+                    self.assertEqual(mock_bulk.call_count, 1)
+                    self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 3)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].release, '1990-01-01')
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].field_name, 'testname')
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].field_id, 1)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].year, 1)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].count, 2)
+
