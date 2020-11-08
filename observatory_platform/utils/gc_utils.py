@@ -28,11 +28,13 @@ from typing import List, Union
 
 import pendulum
 from crc32c import Checksum as Crc32cChecksum
-from google.api_core.exceptions import Conflict
+from google.api_core.exceptions import Conflict, BadRequest
+from google.api_core.exceptions import Forbidden
 from google.cloud import storage, bigquery
 from google.cloud.bigquery import SourceFormat, LoadJobConfig, LoadJob, QueryJob
 from google.cloud.exceptions import NotFound
 from google.cloud.storage import Blob
+from google.resumable_media.common import InvalidResponse
 from googleapiclient import discovery as gcp_api
 from pendulum import Pendulum
 from requests.exceptions import ChunkedEncodingError
@@ -220,15 +222,21 @@ def load_bigquery_table(uri: str, dataset_id: str, location: str, table: str, sc
             require_partition_filter=require_partition_filter
         )
 
-    load_job: LoadJob = client.load_table_from_uri(
-        uri,
-        dataset.table(table),
-        location=location,
-        job_config=job_config
-    )
-    result = load_job.result()
-    logging.info(f"{func_name}: load bigquery table result.state={result.state}, {msg}")
-    return result.state == 'DONE'
+    try:
+        load_job: LoadJob = client.load_table_from_uri(
+            uri,
+            dataset.table(table),
+            location=location,
+            job_config=job_config
+        )
+        result = load_job.result()
+        state = result.state == 'DONE'
+        logging.info(f"{func_name}: load bigquery table result.state={result.state}, {msg}")
+    except BadRequest as e:
+        logging.error(f"{func_name}: load bigquery table failed: {e}")
+        state = False
+
+    return state
 
 
 def run_bigquery_query(query: str) -> List:
@@ -553,49 +561,53 @@ def upload_file_to_cloud_storage(bucket_name: str, blob_name: str, file_path: st
     upload = True
     success = False
 
-    # Get blob
-    storage_client = storage.Client()
-    bucket = storage_client.get_bucket(bucket_name)
-    blob = bucket.blob(blob_name)
+    try:
+        # Get blob
+        storage_client = storage.Client()
+        bucket = storage_client.get_bucket(bucket_name)
+        blob = bucket.blob(blob_name)
 
-    # Check if blob exists already and matches the file we are uploading
-    if blob.exists():
-        # Get blob hash
-        blob.reload()
-        expected_hash = blob.crc32c
+        # Check if blob exists already and matches the file we are uploading
+        if blob.exists():
+            # Get blob hash
+            blob.reload()
+            expected_hash = blob.crc32c
 
-        # Check file hash
-        actual_hash = crc32c_base64_hash(file_path)
+            # Check file hash
+            actual_hash = crc32c_base64_hash(file_path)
 
-        # Compare hashes
-        files_match = expected_hash == actual_hash
-        logging.info(f'{func_name}: files_match={files_match}, expected_hash={expected_hash}, '
-                     f'actual_hash={actual_hash}')
-        if files_match:
-            logging.info(
-                f'{func_name}: skipping upload as files match bucket_name={bucket_name}, blob_name={blob_name}, '
-                f'file_path={file_path}')
-            upload = False
-            success = True
-
-    # Upload if file doesn't exist or exists and doesn't match
-    if upload:
-        # Get connection semaphore
-        if connection_sem is not None:
-            connection_sem.acquire()
-
-        for i in range(0, retries):
-            try:
-                blob.chunk_size = chunk_size
-                blob.upload_from_filename(file_path)
+            # Compare hashes
+            files_match = expected_hash == actual_hash
+            logging.info(f'{func_name}: files_match={files_match}, expected_hash={expected_hash}, '
+                         f'actual_hash={actual_hash}')
+            if files_match:
+                logging.info(
+                    f'{func_name}: skipping upload as files match bucket_name={bucket_name}, blob_name={blob_name}, '
+                    f'file_path={file_path}')
+                upload = False
                 success = True
-                break
-            except ChunkedEncodingError as e:
-                logging.error(f'{func_name}: exception uploading file: try={i}, exception={e}')
 
-        # Release connection semaphore
-        if connection_sem is not None:
-            connection_sem.release()
+        # Upload if file doesn't exist or exists and doesn't match
+        if upload:
+            # Get connection semaphore
+            if connection_sem is not None:
+                connection_sem.acquire()
+
+            for i in range(0, retries):
+                try:
+                    blob.chunk_size = chunk_size
+                    blob.upload_from_filename(file_path)
+                    success = True
+                    break
+                except (ChunkedEncodingError, Forbidden, InvalidResponse) as e:
+                    logging.error(f'{func_name}: exception uploading file: try={i}, exception={e}')
+
+            # Release connection semaphore
+            if connection_sem is not None:
+                connection_sem.release()
+
+    except (ChunkedEncodingError, Forbidden, InvalidResponse) as e:
+        logging.error(f'{func_name}: exception uploading file exception={e}')
 
     return success
 
