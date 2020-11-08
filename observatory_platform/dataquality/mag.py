@@ -30,6 +30,8 @@ from google.oauth2 import service_account
 from jinja2 import Environment, PackageLoader
 from scipy.spatial.distance import jensenshannon
 from typing import Union, Any, List, Hashable, Tuple, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 from elasticsearch import NotFoundError
 from elasticsearch_dsl.document import IndexMeta
@@ -325,7 +327,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
             order_by=MagTableKey.COL_FOS_ID,
             where='Level = 0'
         )
-        return pd.read_gbq(sql, project_id=self._project_id)
+        return pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
 
     @staticmethod
     def _get_es_counts(release: str) -> Union[None, DataFrame]:
@@ -432,7 +434,7 @@ class PaperMetricsModule(MagAnalyserModule):
             null_count=[MagTableKey.COL_DOI, MagTableKey.COL_DOC_TYPE, MagTableKey.COL_YEAR,
                         MagTableKey.COL_FAMILY_ID]
         )
-        return pd.read_gbq(sql, project_id=self._project_id)
+        return pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
 
 
 class PaperYearsCountModule(MagAnalyserModule):
@@ -503,7 +505,7 @@ class PaperYearsCountModule(MagAnalyserModule):
             project_id=self._project_id, dataset_id=self._dataset_id, table_id=table_id,
             column='Year', where='Year IS NOT NULL'
         )
-        df = pd.read_gbq(sql, project_id=self._project_id)
+        df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
         return df['Year'].to_list(), df['count'].to_list()
 
 
@@ -511,6 +513,8 @@ class PapersFieldYearCountModule(MagAnalyserModule):
     """
     MagAnalyser module to compute the paper counts per field per year.
     """
+
+    BQ_SESSIONS = 20  # Limit is 100.
 
     def __init__(self, project_id: str, dataset_id: str, cache):
         """ Initialise the module.
@@ -544,15 +548,23 @@ class PapersFieldYearCountModule(MagAnalyserModule):
             ts = release.strftime('%Y%m%d')
             fos_ids = self._cache[f'{MagCacheKey.FOSL0}{ts}']
 
-            for id, name in fos_ids:
-                year_count = self._get_year_counts(id, ts)
+            year_counts = list()
+            logging.info(f'Fetching release {ts}')
+            with ThreadPoolExecutor(max_workers=PapersFieldYearCountModule.BQ_SESSIONS) as executor:
+                futures = list()
+                for id, name in fos_ids:
+                    futures.append(executor.submit(self._get_year_counts, id, ts))
 
+                for future in as_completed(futures):
+                    year_counts.append(future.result())
+
+            for year_count in year_counts:
                 for year, count in year_count:
-                    doc = MagPapersFieldYearCount(release=release.isoformat(), field_name=name, field_id=id, year=year, count=count)
+                    doc = MagPapersFieldYearCount(release=release.isoformat(), field_name=name, field_id=id, year=year,
+                                                  count=count)
                     docs.append(doc)
 
-        logging.info(f'Constructed {len(docs)} MagPapersFieldYearCount documents.')
-
+        logging.info(f'Indexing {len(docs)} MagPapersFieldYearCount documents.')
         if len(docs) > 0:
             bulk_index(docs)
 
@@ -577,7 +589,7 @@ class PapersFieldYearCountModule(MagAnalyserModule):
 
         sql = self._tpl_count_per_field.render(project_id=self._project_id, dataset_id=self._dataset_id, release=ts,
                                                fos_id=id)
-        df = pd.read_gbq(sql, project_id=self._project_id)
+        df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
         return zip(df['Year'].to_list(), df['count'].to_list())
 
 
@@ -686,7 +698,7 @@ class MagAnalyser(DataQualityAnalyser):
 
         sql = self._tpl_releases.render(project_id=self._project_id, dataset_id=self._dataset_id,
                                         table_id=MagTableKey.TID_FOS, end_date=self._end_date)
-        rel_list = list(reversed(pd.read_gbq(sql, project_id=self._project_id)['suffix']))
+        rel_list = list(reversed(pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)['suffix']))
         releases = [release.date() for release in rel_list]
         logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
         return releases
@@ -703,7 +715,7 @@ class MagAnalyser(DataQualityAnalyser):
                                       columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME], where='Level = 0',
                                       order_by=MagTableKey.COL_FOS_ID)
 
-        df = pd.read_gbq(sql, project_id=self._project_id)
+        df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
         ids = df[MagTableKey.COL_FOS_ID].to_list()
         names = df[MagTableKey.COL_NORM_NAME].to_list()
 
