@@ -138,3 +138,20 @@ class MagFosL0Counts(NSDocument):
         }
 
 
+class MagDoiCounts(NSDocument):
+    """ Aggregate counts and proportions of documents with no DOI by document type. """
+
+    release = Date(required=True, default_timezone='UTC')
+    doc_type = Text(required=True)
+    count = Long(required=True)
+    no_doi = Long(required=True)
+    pno_doi = Double(required=True)
+
+    class Index:
+        name = 'dataquality-mag-doi-counts'
+        settings = {
+            'number_of_shards': 2,
+            'number_of_replicas': 0
+        }
+
+
