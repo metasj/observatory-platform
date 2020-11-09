@@ -138,7 +138,7 @@ class MagFosL0Counts(NSDocument):
         }
 
 
-class MagDoiCounts(NSDocument):
+class MagDoiCountsDocType(NSDocument):
     """ Aggregate counts and proportions of documents with no DOI by document type. """
 
     release = Date(required=True, default_timezone='UTC')
@@ -155,3 +155,12 @@ class MagDoiCounts(NSDocument):
         }
 
 
+class MagDoiCountsFosL0(NSDocument):
+    """ Aggregate doi counts by level 0 fields of study. """
+
+    release = Date(required=True, default_timezone='UTC')
+    fos_id = Text(required=True)
+    fos_name = Text(required=True)
+    count = Long(required=True)
+    no_doi = Long(required=True)
+    pno_doi = Double(required=True)
