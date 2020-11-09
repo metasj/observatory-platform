@@ -189,7 +189,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
             previous_counts = self._get_bq_counts(releases[0])
         else:
             logging.info('Retrieving elastic search records.')
-            previous_counts = FieldsOfStudyLevel0Module._get_es_counts(releases[self._num_es_counts - 1].isoformat())
+            previous_counts = FieldsOfStudyLevel0Module._get_es_counts(releases[self._num_es_metrics - 1].isoformat())
 
             if previous_counts is None:
                 logging.warning('Inconsistent records found in elastic search. Recalculating all releases.')
@@ -514,8 +514,6 @@ class PapersFieldYearCountModule(MagAnalyserModule):
     MagAnalyser module to compute the paper counts per field per year.
     """
 
-    BQ_SESSIONS = 20  # Limit is 100.
-
     def __init__(self, project_id: str, dataset_id: str, cache):
         """ Initialise the module.
         @param project_id: Project ID in BigQuery.
@@ -550,7 +548,7 @@ class PapersFieldYearCountModule(MagAnalyserModule):
 
             year_counts = list()
             logging.info(f'Fetching release {ts}')
-            with ThreadPoolExecutor(max_workers=PapersFieldYearCountModule.BQ_SESSIONS) as executor:
+            with ThreadPoolExecutor(max_workers=MagAnalyser.BQ_SESSION_LIMIT) as executor:
                 futures = list()
                 for id, name in fos_ids:
                     futures.append(executor.submit(self._get_year_counts, id, ts))
@@ -601,6 +599,7 @@ class MagAnalyser(DataQualityAnalyser):
 
     ES_FOS_ID = 'field_id'
     ARG_MODULES = 'modules'
+    BQ_SESSION_LIMIT = 20  # Limit is 100.
 
     def __init__(self, project_id: str = 'academic-observatory-dev', dataset_id: str = 'mag',
                  modules: Union[None, List[MagAnalyserModule]] = None):
@@ -655,13 +654,14 @@ class MagAnalyser(DataQualityAnalyser):
 
         # Use default modules.
         else:
-            fosl0 = FieldsOfStudyLevel0Module(self._project_id, self._dataset_id, self._cache)
-            paper_metrics = PaperMetricsModule(self._project_id, self._dataset_id, self._cache)
-            paper_years_count = PaperYearsCountModule(self._project_id, self._dataset_id, self._cache)
+            default_modules = list()
+            default_modules.append(FieldsOfStudyLevel0Module(self._project_id, self._dataset_id, self._cache))
+            default_modules.append(PaperMetricsModule(self._project_id, self._dataset_id, self._cache))
+            default_modules.append(PaperYearsCountModule(self._project_id, self._dataset_id, self._cache))
+            default_modules.append(PapersFieldYearCountModule(self._project_id, self._dataset_id, self._cache))
 
-            mods[fosl0.name()] = fosl0
-            mods[paper_metrics.name()] = paper_metrics
-            mods[paper_years_count.name()] = paper_years_count
+            for module in default_modules:
+                mods[module.name()] = module
 
         return mods
 
