@@ -35,7 +35,17 @@ from elasticsearch_dsl import (
 )
 
 
-class MagPapersFieldYearCount(Document):
+class NSDocument(Document):
+    """ Abstract Document. Prevent serialization. Cut down on boiler plate in the class definitions. """
+
+    @classmethod
+    def _matches(cls, _):
+        """ Abstract class. Do not deserialize. """
+
+        return False
+
+
+class MagPapersFieldYearCount(NSDocument):
     """ Number of papers per field per year. """
 
     release = Date(required=True, default_timezone='UTC')
@@ -51,21 +61,8 @@ class MagPapersFieldYearCount(Document):
             'number_of_replicas': 0
         }
 
-    @classmethod
-    def _matches(cls, _):
-        """ This is an abstract class. Never use it for deserialization. """
 
-        return False
-
-    def save(self, **kwargs):
-        """ Indexes the document in elastic search. """
-
-        if self.release is None:
-            self.release = datetime.now()
-        return super().save(**kwargs)
-
-
-class MagPapersYearCount(Document):
+class MagPapersYearCount(NSDocument):
     """ Number of papers in MAG for a given year. """
 
     release = Date(required=True, default_timezone='UTC')
@@ -79,21 +76,8 @@ class MagPapersYearCount(Document):
             'number_of_replicas': 0
         }
 
-    @classmethod
-    def _matches(cls, _):
-        """ MagPapersYearCount is an abstract class, make sure it never gets used for deserialization. """
 
-        return False
-
-    def save(self, **kwargs):
-        """ Indexes the document in elastic search. """
-
-        if self.release is None:
-            self.release = datetime.now()
-        return super().save(**kwargs)
-
-
-class MagPapersMetrics(Document):
+class MagPapersMetrics(NSDocument):
     """ Some aggregate metrics for the Papers dataset in MAG. """
 
     release = Date(required=True, default_timezone='UTC')
@@ -114,21 +98,8 @@ class MagPapersMetrics(Document):
             'number_of_replicas': 0
         }
 
-    @classmethod
-    def _matches(cls, _):
-        """MagPapersMetrics is an abstract class, make sure it never gets used for deserialization. """
 
-        return False
-
-    def save(self, **kwargs):
-        """ Indexes the document in elastic search. """
-
-        if self.release is None:
-            self.release = datetime.now()
-        return super().save(**kwargs)
-
-
-class MagFosL0Metrics(Document):
+class MagFosL0Metrics(NSDocument):
     """ Level 0 Fields Of Study metrics on the relative subject labels on each paper. Note that a paper can have several
         labels.
     """
@@ -147,21 +118,8 @@ class MagFosL0Metrics(Document):
             'number_of_replicas': 0
         }
 
-    @classmethod
-    def _matches(cls, _):
-        """ MagFosL0Metrics is an abstract class, make sure it never gets used for deserialization. """
 
-        return False
-
-    def save(self, **kwargs):
-        """ Indexes the document in elastic search. """
-
-        if self.release is None:
-            self.release = datetime.now()
-        return super().save(**kwargs)
-
-
-class MagFosL0Counts(Document):
+class MagFosL0Counts(NSDocument):
     """ Aggregate counts and proportions per field of study from the FieldsOfStudy dataset. """
 
     release = Date(required=True, default_timezone='UTC')
@@ -179,15 +137,4 @@ class MagFosL0Counts(Document):
             'number_of_replicas': 0
         }
 
-    @classmethod
-    def _matches(cls, _):
-        """ MagFosL0Counts is an abstract class, make sure it never gets used for deserialization. """
 
-        return False
-
-    def save(self, **kwargs):
-        """ Indexes the document in elastic search. """
-
-        if self.release is None:
-            self.release = datetime.now()
-        return super().save(**kwargs)
