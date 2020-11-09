@@ -155,3 +155,7 @@ class MagDoiCountsFosL0(NSDocument):
     count = Long(required=True)
     no_doi = Long(required=True)
     pno_doi = Double(required=True)
+
+    class Index:
+        name = 'dataquality-mag-doi-counts-fosl0'
+        settings = MagDocIndexSettings.settings
