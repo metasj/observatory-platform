@@ -53,6 +53,7 @@ from observatory_platform.dataquality.es_mag import (
     MagPapersYearCount,
     MagPapersFieldYearCount,
     MagDoiCountsDocType,
+    MagDoiCountsDocTypeYear,
 )
 
 from observatory_platform.dataquality.utils import (
@@ -124,12 +125,19 @@ class MagAnalyserModule(ABC):
         return self.__class__.__name__
 
 
+class JinjaParams:
+    """ Jinja parameters. """
+
+    PKG_NAME = 'observatory_platform'
+    TEMPLATE_PATHS = 'database/dataquality/sql'
+
+
 class MagCacheKey:
-    """ Cache key names """
+    """ Cache key names.  The date string format is %Y%m%d """
 
     RELEASES = 'releases'  # MAG release dates
-    FOSL0 = 'fosl0_'  # concatenated with a date string (%Y%m%d). List of MAG FoS Level 0 fields.
-
+    FOSL0 = 'fosl0_'  # concatenated with a date string. List of MAG FoS Level 0 fields.
+    DOC_TYPE = 'doctype_'  # concatenated with a date string. Doctype from a release.
 
 class MagTableKey:
     """ BQ table and column names. """
@@ -167,7 +175,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         self._cache = cache
 
         self._tpl_env = Environment(
-            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+            loader=PackageLoader(JinjaParams.PKG_NAME, JinjaParams.TEMPLATE_PATHS))
         self._tpl_select = self._tpl_env.get_template('select_table.sql.jinja2')
 
         self._num_es_metrics = get_or_init_doc_count(MagFosL0Metrics)
@@ -370,7 +378,7 @@ class PaperMetricsModule(MagAnalyserModule):
         self._es_count = get_or_init_doc_count(MagPapersMetrics)
 
         self._tpl_env = Environment(
-            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+            loader=PackageLoader(JinjaParams.PKG_NAME, JinjaParams.TEMPLATE_PATHS))
         self._tpl_null_count = self._tpl_env.get_template('null_count.sql.jinja2')
 
     def run(self, **kwargs):
@@ -453,7 +461,7 @@ class PaperYearsCountModule(MagAnalyserModule):
         self._dataset_id = dataset_id
         self._cache = cache
         self._tpl_env = Environment(
-            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+            loader=PackageLoader(JinjaParams.PKG_NAME, JinjaParams.TEMPLATE_PATHS))
         self._tpl_group_count = self._tpl_env.get_template('group_count.sql.jinja2')
         init_doc(MagPapersYearCount)
 
@@ -526,7 +534,7 @@ class PapersFieldYearCountModule(MagAnalyserModule):
         self._dataset_id = dataset_id
         self._cache = cache
         self._tpl_env = Environment(
-            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+            loader=PackageLoader(JinjaParams.PKG_NAME, JinjaParams.TEMPLATE_PATHS))
         self._tpl_count_per_field = self._tpl_env.get_template('mag_fos_count_perfield.sql.jinja2')
         init_doc(MagPapersFieldYearCount)
 
@@ -612,7 +620,7 @@ class DoiCountDocTypeModule(MagAnalyserModule):
         init_doc(MagDoiCountsDocType)
 
         self._tpl_env = Environment(
-            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+            loader=PackageLoader(JinjaParams.PKG_NAME, JinjaParams.TEMPLATE_PATHS))
         self._tpl_select = self._tpl_env.get_template('select_table.sql.jinja2')
 
     def run(self, **kwargs):
@@ -676,7 +684,6 @@ class DoiCountDocTypeModule(MagAnalyserModule):
 
         return docs
 
-
     def _get_bq_counts(self, ts: str):
         """
         Get the Doi counts by DocType from the BigQuery table.
@@ -689,9 +696,9 @@ class DoiCountDocTypeModule(MagAnalyserModule):
                    ]
 
         sql = self._tpl_select.render(project_id=self._project_id, dataset_id=self._dataset_id,
-                                                         table_id=f'{MagTableKey.TID_PAPERS}{ts}', columns=columns,
-                                                         group_by=MagTableKey.COL_DOC_TYPE,
-                                                         order_by=MagTableKey.COL_DOC_TYPE)
+                                      table_id=f'{MagTableKey.TID_PAPERS}{ts}', columns=columns,
+                                      group_by=MagTableKey.COL_DOC_TYPE,
+                                      order_by=MagTableKey.COL_DOC_TYPE)
         df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
         return df
 
@@ -706,7 +713,7 @@ class MagAnalyser(DataQualityAnalyser):
     ARG_MODULES = 'modules'
     BQ_SESSION_LIMIT = 20  # Limit is 100.
 
-    def __init__(self, project_id: str = 'academic-observatory-dev', dataset_id: str = 'mag',
+    def __init__(self, project_id: str, dataset_id: str,
                  modules: Union[None, List[MagAnalyserModule]] = None):
 
         logging.info('Initialising MagAnalyser')
@@ -715,8 +722,8 @@ class MagAnalyser(DataQualityAnalyser):
         self._dataset_id = dataset_id
         self._end_date = datetime.datetime.now(timezone.utc)
         self._tpl_env = Environment(
-            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
-        self._tpl_releases = self._tpl_env.get_template('select_table_suffixes.sql.jinja2')
+            loader=PackageLoader(JinjaParams.PKG_NAME, JinjaParams.TEMPLATE_PATHS))
+        self._tpl_releases = self._tpl_env.get_template('get_releases.sql.jinja2')
         self._tpl_select = self._tpl_env.get_template('select_table.sql.jinja2')
 
         self._cache = AutoFetchCache()
@@ -803,7 +810,7 @@ class MagAnalyser(DataQualityAnalyser):
         """
 
         sql = self._tpl_releases.render(project_id=self._project_id, dataset_id=self._dataset_id,
-                                                           table_id=MagTableKey.TID_FOS, end_date=self._end_date)
+                                        table_id=MagTableKey.TID_FOS, end_date=self._end_date)
         rel_list = list(reversed(pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)['suffix']))
         releases = [release.date() for release in rel_list]
         logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
@@ -817,10 +824,10 @@ class MagAnalyser(DataQualityAnalyser):
 
         table_suffix = key[key.find('_') + 1:]
         sql = self._tpl_select.render(project_id=self._project_id, dataset_id=self._dataset_id,
-                                                         table_id=f'{MagTableKey.TID_FOS}{table_suffix}',
-                                                         columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME],
-                                                         where='Level = 0',
-                                                         order_by=MagTableKey.COL_FOS_ID)
+                                      table_id=f'{MagTableKey.TID_FOS}{table_suffix}',
+                                      columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME],
+                                      where='Level = 0',
+                                      order_by=MagTableKey.COL_FOS_ID)
 
         df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
         ids = df[MagTableKey.COL_FOS_ID].to_list()
