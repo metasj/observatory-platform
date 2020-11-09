@@ -129,9 +129,6 @@ class MagCacheKey:
 
     RELEASES = 'releases'  # MAG release dates
     FOSL0 = 'fosl0_'  # concatenated with a date string (%Y%m%d). List of MAG FoS Level 0 fields.
-    TPL_ENV = 'tpl_env'  # Template environment
-    TPL_RELEASES = 'tpl_releases'  # Template for getting releases from BQ
-    TPL_SELECT = 'tpl_select'  # Template for BQ SELECT call
 
 
 class MagTableKey:
@@ -168,6 +165,11 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._cache = cache
+
+        self._tpl_env = Environment(
+            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+        self._tpl_select = self._tpl_env.get_template('select_table.sql.jinja2')
+
         self._num_es_metrics = get_or_init_doc_count(MagFosL0Metrics)
         self._num_es_counts = get_or_init_doc_count(MagFosL0Counts)
 
@@ -319,7 +321,7 @@ class FieldsOfStudyLevel0Module(MagAnalyserModule):
 
         ts = release.strftime('%Y%m%d')
         table_id = f'{MagTableKey.TID_FOS}{ts}'
-        sql = self._cache[MagCacheKey.TPL_SELECT].render(
+        sql = self._tpl_select.render(
             project_id=self._project_id, dataset_id=self._dataset_id, table_id=table_id,
             columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME,
                      MagTableKey.COL_PAP_COUNT, MagTableKey.COL_CIT_COUNT],
@@ -366,7 +368,10 @@ class PaperMetricsModule(MagAnalyserModule):
         self._dataset_id = dataset_id
         self._cache = cache
         self._es_count = get_or_init_doc_count(MagPapersMetrics)
-        self._tpl_null_count = cache[MagCacheKey.TPL_ENV].get_template('null_count.sql.jinja2')
+
+        self._tpl_env = Environment(
+            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+        self._tpl_null_count = self._tpl_env.get_template('null_count.sql.jinja2')
 
     def run(self, **kwargs):
         """ Run the module.
@@ -447,7 +452,9 @@ class PaperYearsCountModule(MagAnalyserModule):
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._cache = cache
-        self._tpl_group_count = cache[MagCacheKey.TPL_ENV].get_template('group_count.sql.jinja2')
+        self._tpl_env = Environment(
+            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+        self._tpl_group_count = self._tpl_env.get_template('group_count.sql.jinja2')
         init_doc(MagPapersYearCount)
 
     def run(self, **kwargs):
@@ -518,7 +525,9 @@ class PapersFieldYearCountModule(MagAnalyserModule):
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._cache = cache
-        self._tpl_count_per_field = cache[MagCacheKey.TPL_ENV].get_template('mag_fos_count_perfield.sql.jinja2')
+        self._tpl_env = Environment(
+            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+        self._tpl_count_per_field = self._tpl_env.get_template('mag_fos_count_perfield.sql.jinja2')
         init_doc(MagPapersFieldYearCount)
 
     def run(self, **kwargs):
@@ -602,6 +611,10 @@ class DoiCountDocTypeModule(MagAnalyserModule):
         self._cache = cache
         init_doc(MagDoiCountsDocType)
 
+        self._tpl_env = Environment(
+            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+        self._tpl_select = self._tpl_env.get_template('select_table.sql.jinja2')
+
     def run(self, **kwargs):
         """ Run the module.
         @param kwargs: Unused.
@@ -675,7 +688,7 @@ class DoiCountDocTypeModule(MagAnalyserModule):
                    f'COUNTIF({MagTableKey.COL_DOI} IS NULL) AS {DoiCountDocTypeModule.BQ_NULL_COUNT}'
                    ]
 
-        sql = self._cache[MagCacheKey.TPL_SELECT].render(project_id=self._project_id, dataset_id=self._dataset_id,
+        sql = self._tpl_select.render(project_id=self._project_id, dataset_id=self._dataset_id,
                                                          table_id=f'{MagTableKey.TID_PAPERS}{ts}', columns=columns,
                                                          group_by=MagTableKey.COL_DOC_TYPE,
                                                          order_by=MagTableKey.COL_DOC_TYPE)
@@ -701,6 +714,11 @@ class MagAnalyser(DataQualityAnalyser):
         self._project_id = project_id
         self._dataset_id = dataset_id
         self._end_date = datetime.datetime.now(timezone.utc)
+        self._tpl_env = Environment(
+            loader=PackageLoader('observatory_platform', 'database/workflows/sql'))
+        self._tpl_releases = self._tpl_env.get_template('select_table_suffixes.sql.jinja2')
+        self._tpl_select = self._tpl_env.get_template('select_table.sql.jinja2')
+
         self._cache = AutoFetchCache()
         self._init_cache()
         self._modules = self._load_modules(modules)
@@ -734,32 +752,8 @@ class MagAnalyser(DataQualityAnalyser):
     def _init_cache(self):
         """ Initialise some common things in the auto fetcher cache. """
 
-        self._init_tpl_env_fetcher()
-        self._init_tpl_releases_fetcher()
-        self._init_tpl_select_fetcher()
-
         self._init_releases_fetcher()
         self._init_fosl0_fetcher()
-
-    def _init_tpl_env_fetcher(self):
-        """ Initialise the Jinja template environment object fetcher. """
-
-        self._cache.set_fetcher(MagCacheKey.TPL_ENV, lambda _: Environment(
-            loader=PackageLoader('observatory_platform', 'database/workflows/sql')))
-
-    def _init_tpl_releases_fetcher(self):
-        """ Initialise the Jinja releases template fetcher. """
-
-        tpl_env = self._cache[MagCacheKey.TPL_ENV]
-        releases = tpl_env.get_template('select_table_suffixes.sql.jinja2')
-        self._cache.set_fetcher(MagCacheKey.TPL_RELEASES, lambda _: releases)
-
-    def _init_tpl_select_fetcher(self):
-        """ Initialise the Jinja select template fetcher. """
-
-        tpl_env = self._cache[MagCacheKey.TPL_ENV]
-        select = tpl_env.get_template('select_table.sql.jinja2')
-        self._cache.set_fetcher(MagCacheKey.TPL_SELECT, lambda _: select)
 
     def _init_releases_fetcher(self):
         """ Initialise the releases cache fetcher. """
@@ -808,7 +802,7 @@ class MagAnalyser(DataQualityAnalyser):
         @return: List of MAG release dates sorted in ascending order.
         """
 
-        sql = self._cache[MagCacheKey.TPL_RELEASES].render(project_id=self._project_id, dataset_id=self._dataset_id,
+        sql = self._tpl_releases.render(project_id=self._project_id, dataset_id=self._dataset_id,
                                                            table_id=MagTableKey.TID_FOS, end_date=self._end_date)
         rel_list = list(reversed(pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)['suffix']))
         releases = [release.date() for release in rel_list]
@@ -822,7 +816,7 @@ class MagAnalyser(DataQualityAnalyser):
         """
 
         table_suffix = key[key.find('_') + 1:]
-        sql = self._cache[MagCacheKey.TPL_SELECT].render(project_id=self._project_id, dataset_id=self._dataset_id,
+        sql = self._tpl_select.render(project_id=self._project_id, dataset_id=self._dataset_id,
                                                          table_id=f'{MagTableKey.TID_FOS}{table_suffix}',
                                                          columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME],
                                                          where='Level = 0',
