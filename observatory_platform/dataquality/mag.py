@@ -705,6 +705,32 @@ class MagAnalyser(DataQualityAnalyser):
         self._init_cache()
         self._modules = self._load_modules(modules)
 
+    def run(self, **kwargs):
+        """ Entry point for the analyser.
+
+        @param kwargs: Optional arguments.
+        modules=list() a list of module names to run in order.
+        """
+
+        logging.info('Running MagAnalyserModule modules.')
+        modules = self._modules
+
+        if MagAnalyser.ARG_MODULES in kwargs:
+            modules = self._load_modules(kwargs[MagAnalyser.ARG_MODULES])
+
+        for module in modules.values():
+            module.run()
+
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by all modules in the analyser.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Unused.
+        """
+
+        for module in self._modules.values():
+            module.erase(index)
+
     def _init_cache(self):
         """ Initialise some common things in the auto fetcher cache. """
 
@@ -776,32 +802,6 @@ class MagAnalyser(DataQualityAnalyser):
                 mods[module.name()] = module
 
         return mods
-
-    def run(self, **kwargs):
-        """ Entry point for the analyser.
-
-        @param kwargs: Optional arguments.
-        modules=list() a list of module names to run in order.
-        """
-
-        logging.info('Running MagAnalyserModule modules.')
-        modules = self._modules
-
-        if MagAnalyser.ARG_MODULES in kwargs:
-            modules = self._load_modules(kwargs[MagAnalyser.ARG_MODULES])
-
-        for module in modules.values():
-            module.run()
-
-    def erase(self, index: bool = False, **kwargs):
-        """
-        Erase elastic search records used by all modules in the analyser.
-        @param index: If index=True, will also delete indices.
-        @param kwargs: Unused.
-        """
-
-        for module in self._modules.values():
-            module.erase(index)
 
     def _get_releases(self) -> List[datetime.date]:
         """ Get the list of MAG releases from BigQuery.
