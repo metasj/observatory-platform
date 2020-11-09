@@ -34,6 +34,12 @@ from elasticsearch_dsl import (
     Integer,
 )
 
+class MagDocIndexSettings:
+    """ Generic settings the documents can use. """
+    settings = {
+        'number_of_shards': 2,
+        'number_of_replicas': 0
+    }
 
 class NSDocument(Document):
     """ Abstract Document. Prevent serialization. Cut down on boiler plate in the class definitions. """
@@ -56,10 +62,7 @@ class MagPapersFieldYearCount(NSDocument):
 
     class Index:
         name = 'dataquality-mag-papers-field-year'
-        settings = {
-            'number_of_shards': 2,
-            'number_of_replicas': 0
-        }
+        settings = MagDocIndexSettings.settings
 
 
 class MagPapersYearCount(NSDocument):
@@ -71,10 +74,7 @@ class MagPapersYearCount(NSDocument):
 
     class Index:
         name = 'dataquality-mag-papers-year'
-        settings = {
-            'number_of_shards': 2,
-            'number_of_replicas': 0
-        }
+        settings = MagDocIndexSettings.settings
 
 
 class MagPapersMetrics(NSDocument):
@@ -93,10 +93,7 @@ class MagPapersMetrics(NSDocument):
 
     class Index:
         name = 'dataquality-mag-papers-metrics'
-        settings = {
-            'number_of_shards': 2,
-            'number_of_replicas': 0
-        }
+        settings = MagDocIndexSettings.settings
 
 
 class MagFosL0Metrics(NSDocument):
@@ -113,10 +110,7 @@ class MagFosL0Metrics(NSDocument):
 
     class Index:
         name = 'dataquality-mag-fieldsofstudy-l0-metrics'
-        settings = {
-            'number_of_shards': 2,
-            'number_of_replicas': 0
-        }
+        settings = MagDocIndexSettings.settings
 
 
 class MagFosL0Counts(NSDocument):
@@ -149,10 +143,7 @@ class MagDoiCountsDocType(NSDocument):
 
     class Index:
         name = 'dataquality-mag-doi-counts'
-        settings = {
-            'number_of_shards': 2,
-            'number_of_replicas': 0
-        }
+        settings = MagDocIndexSettings.settings
 
 
 class MagDoiCountsFosL0(NSDocument):
