@@ -133,6 +133,7 @@ class MagCacheKey:
     TPL_RELEASES = 'tpl_releases'  # Template for getting releases from BQ
     TPL_SELECT = 'tpl_select'  # Template for BQ SELECT call
 
+
 class MagTableKey:
     """ BQ table and column names. """
 
@@ -580,6 +581,108 @@ class PapersFieldYearCountModule(MagAnalyserModule):
         return zip(df['Year'].to_list(), df['count'].to_list())
 
 
+class DoiCountDocTypeModule(MagAnalyserModule):
+    """
+    MagAnalyser module to compute Doi counts by DocType.
+    """
+
+    BQ_DOC_COUNT = 'doc_count'
+    BQ_NULL_COUNT = 'null_count'
+
+    def __init__(self, project_id: str, dataset_id: str, cache):
+        """ Initialise the module.
+        @param project_id: Project ID in BigQuery.
+        @param dataset_id: Dataset ID in BigQuery.
+        @param cache: Analyser cache to use.
+        """
+
+        logging.info(f'Initialising {self.name()}')
+        self._project_id = project_id
+        self._dataset_id = dataset_id
+        self._cache = cache
+        init_doc(MagDoiCountsDocType)
+
+    def run(self, **kwargs):
+        """ Run the module.
+        @param kwargs: Unused.
+        """
+
+        logging.info(f'Running {self.name()}')
+        releases = self._cache[MagCacheKey.RELEASES]
+
+        docs = list()
+        with ThreadPoolExecutor(max_workers=MagAnalyser.BQ_SESSION_LIMIT) as executor:
+            futures = list()
+            for release in releases:
+                futures.append(executor.submit(self._construct_es_docs, release))
+
+            for future in as_completed(futures):
+                docs.extend(future.result())
+
+        if len(docs) > 0:
+            bulk_index(docs)
+
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by the module and delete the index.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Unused.
+        """
+
+        clear_index(MagDoiCountsDocType)
+
+        if index:
+            delete_index(MagDoiCountsDocType)
+
+    def _construct_es_docs(self, release: datetime.date) -> MagDoiCountsDocType:
+        """
+        Construct the elastic search documents for a given release.
+        @param release: Release timestamp.
+        @return List of MagDoiCountsDocType docs.
+        """
+
+        ts = release.strftime('%Y%m%d')
+        logging.info(f'DoiCountDocTypeModule processing release {ts}')
+
+        if search_count_by_release(MagDoiCountsDocType, release.isoformat()) > 0:
+            return
+
+        docs = list()
+        counts = self._get_bq_counts(ts)
+        n_counts = len(counts[MagTableKey.COL_DOC_TYPE])
+        for i in range(n_counts):
+            count = counts[DoiCountDocTypeModule.BQ_DOC_COUNT][i]
+            no_doi = counts[DoiCountDocTypeModule.BQ_NULL_COUNT][i]
+            doc_type = counts[MagTableKey.COL_DOC_TYPE][i]
+            if doc_type is None:
+                doc_type = "null"
+
+            doc = MagDoiCountsDocType(release=release.isoformat(), doc_type=doc_type, count=count, no_doi=no_doi,
+                                      pno_doi=no_doi / count)
+            docs.append(doc)
+
+        return docs
+
+
+    def _get_bq_counts(self, ts: str):
+        """
+        Get the Doi counts by DocType from the BigQuery table.
+        @param ts: Timestamp to use as table suffix.
+        """
+
+        columns = [MagTableKey.COL_DOC_TYPE,
+                   f'SUM(CASE WHEN {MagTableKey.COL_DOC_TYPE} IS NULL THEN 1 ELSE 1 END) AS {DoiCountDocTypeModule.BQ_DOC_COUNT}',
+                   f'COUNTIF({MagTableKey.COL_DOI} IS NULL) AS {DoiCountDocTypeModule.BQ_NULL_COUNT}'
+                   ]
+
+        sql = self._cache[MagCacheKey.TPL_SELECT].render(project_id=self._project_id, dataset_id=self._dataset_id,
+                                                         table_id=f'{MagTableKey.TID_PAPERS}{ts}', columns=columns,
+                                                         group_by=MagTableKey.COL_DOC_TYPE,
+                                                         order_by=MagTableKey.COL_DOC_TYPE)
+        df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
+        return df
+
+
 class MagAnalyser(DataQualityAnalyser):
     """
     Perform data quality analysis on a Microsoft Academic Graph release, and save the results to ElasticSearch and
@@ -605,11 +708,12 @@ class MagAnalyser(DataQualityAnalyser):
     def _init_cache(self):
         """ Initialise some common things in the auto fetcher cache. """
 
-        self._init_releases_fetcher()
-        self._init_fosl0_fetcher()
         self._init_tpl_env_fetcher()
         self._init_tpl_releases_fetcher()
         self._init_tpl_select_fetcher()
+
+        self._init_releases_fetcher()
+        self._init_fosl0_fetcher()
 
     def _init_tpl_env_fetcher(self):
         """ Initialise the Jinja template environment object fetcher. """
@@ -622,14 +726,14 @@ class MagAnalyser(DataQualityAnalyser):
 
         tpl_env = self._cache[MagCacheKey.TPL_ENV]
         releases = tpl_env.get_template('select_table_suffixes.sql.jinja2')
-        self._cache.set_fetcher(MagCacheKey.RELEASES, lambda _: releases)
+        self._cache.set_fetcher(MagCacheKey.TPL_RELEASES, lambda _: releases)
 
     def _init_tpl_select_fetcher(self):
         """ Initialise the Jinja select template fetcher. """
 
         tpl_env = self._cache[MagCacheKey.TPL_ENV]
         select = tpl_env.get_template('select_table.sql.jinja2')
-        self._cache.set_fetcher(MagCacheKey.RELEASES, lambda _: select)
+        self._cache.set_fetcher(MagCacheKey.TPL_SELECT, lambda _: select)
 
     def _init_releases_fetcher(self):
         """ Initialise the releases cache fetcher. """
@@ -666,6 +770,7 @@ class MagAnalyser(DataQualityAnalyser):
             default_modules.append(PaperMetricsModule(self._project_id, self._dataset_id, self._cache))
             default_modules.append(PaperYearsCountModule(self._project_id, self._dataset_id, self._cache))
             default_modules.append(PapersFieldYearCountModule(self._project_id, self._dataset_id, self._cache))
+            default_modules.append(DoiCountDocTypeModule(self._project_id, self._dataset_id, self._cache))
 
             for module in default_modules:
                 mods[module.name()] = module
@@ -704,7 +809,7 @@ class MagAnalyser(DataQualityAnalyser):
         """
 
         sql = self._cache[MagCacheKey.TPL_RELEASES].render(project_id=self._project_id, dataset_id=self._dataset_id,
-                                        table_id=MagTableKey.TID_FOS, end_date=self._end_date)
+                                                           table_id=MagTableKey.TID_FOS, end_date=self._end_date)
         rel_list = list(reversed(pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)['suffix']))
         releases = [release.date() for release in rel_list]
         logging.info(f'Found {len(releases)} MAG releases in BigQuery.')
@@ -718,9 +823,10 @@ class MagAnalyser(DataQualityAnalyser):
 
         table_suffix = key[key.find('_') + 1:]
         sql = self._cache[MagCacheKey.TPL_SELECT].render(project_id=self._project_id, dataset_id=self._dataset_id,
-                                      table_id=f'{MagTableKey.TID_FOS}{table_suffix}',
-                                      columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME], where='Level = 0',
-                                      order_by=MagTableKey.COL_FOS_ID)
+                                                         table_id=f'{MagTableKey.TID_FOS}{table_suffix}',
+                                                         columns=[MagTableKey.COL_FOS_ID, MagTableKey.COL_NORM_NAME],
+                                                         where='Level = 0',
+                                                         order_by=MagTableKey.COL_FOS_ID)
 
         df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
         ids = df[MagTableKey.COL_FOS_ID].to_list()
