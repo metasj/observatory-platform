@@ -18,23 +18,19 @@
 
 import unittest
 import pandas as pd
-import numpy as np
 import datetime
 import observatory_platform.dataquality.mag as magdq
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from observatory_platform.utils.autofetchcache import AutoFetchCache
 
-from observatory_platform.dataquality.mag import (
-    FieldsOfStudyLevel0Module,
-    PaperYearsCountModule,
-    PaperMetricsModule,
-    PapersFieldYearCountModule,
-    MagAnalyser,
-    MagAnalyserModule,
-    MagTableKey,
-    MagCacheKey,
-)
+from observatory_platform.dataquality.mod.mag_fosl0 import FieldsOfStudyLevel0Module
+from observatory_platform.dataquality.mod.mag_paperyearscount import PaperYearsCountModule
+from observatory_platform.dataquality.mod.mag_papermetrics import PaperMetricsModule
+from observatory_platform.dataquality.mod.mag_paperfieldyearcount import PaperFieldYearCountModule
+from observatory_platform.dataquality.mag import MagAnalyser
+from observatory_platform.dataquality.analyser import MagAnalyserModule
+from observatory_platform.dataquality.config import MagTableKey, MagCacheKey
 
 
 class TestMagAnalyser(unittest.TestCase):
@@ -50,7 +46,7 @@ class TestMagAnalyser(unittest.TestCase):
 
     @patch('observatory_platform.dataquality.mag.MagAnalyser._init_cache')
     def test_get_releases(self, _):
-        analyser = MagAnalyser(modules=[])
+        analyser = MagAnalyser('project_id', 'dataset_id', modules=[])
         mock_response = {'suffix': [datetime.datetime(2020, 1, 1), datetime.datetime(2010, 1, 1)]}
         with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as _:
             releases = analyser._get_releases()
@@ -62,7 +58,7 @@ class TestMagAnalyser(unittest.TestCase):
         releases = {'suffix': [datetime.datetime(2020, 1, 1), datetime.datetime(2019, 1, 1)]}
 
         with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=releases) as _:
-            analyser = MagAnalyser(modules=[])
+            analyser = MagAnalyser('project_id', 'dataset_id', modules=[])
             freleases = analyser._cache[MagCacheKey.RELEASES]
             self.assertEqual(len(freleases), 2)
             self.assertEqual(freleases[0], releases['suffix'][1].date())
@@ -70,17 +66,17 @@ class TestMagAnalyser(unittest.TestCase):
 
     @patch('observatory_platform.dataquality.mag.MagAnalyser._init_cache')
     def test_load_modules(self, _):
-        analyser = MagAnalyser(modules=[])
+        analyser = MagAnalyser('project_id', 'dataset_id', modules=[])
         self.assertEqual(len(analyser._modules), 0)
 
-        analyser = MagAnalyser(modules=[TestMagAnalyser.MockModule()])
+        analyser = MagAnalyser('project_id', 'dataset_id', modules=[TestMagAnalyser.MockModule()])
         self.assertEqual(len(analyser._modules), 1)
         self.assertTrue(analyser._modules['MockModule'] is not None)
 
     @patch('observatory_platform.dataquality.mag.MagAnalyser._init_cache')
     def test_run(self, _):
         with patch('tests.observatory_platform.dataquality.test_mag.TestMagAnalyser.MockModule.run') as mock_run:
-            analyser = MagAnalyser(modules=[TestMagAnalyser.MockModule()])
+            analyser = MagAnalyser('project_id', 'dataset_id', modules=[TestMagAnalyser.MockModule()])
             analyser.run()
             self.assertEqual(mock_run.call_count, 1)
 
@@ -90,12 +86,12 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
         super().__init__(*args, **kwargs)
         self.cache = AutoFetchCache(20)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_name(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         self.assertEqual(self.module.name(), 'FieldsOfStudyLevel0Module')
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_get_es_count(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
 
@@ -105,14 +101,15 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
             paper_count = 2
             citation_count = 3
 
-        with patch('observatory_platform.dataquality.mag.search_by_release', return_value=[MockResponse]) as _:
+        with patch('observatory_platform.dataquality.mod.mag_fosl0.search_by_release',
+                   return_value=[MockResponse]) as _:
             result = self.module._get_es_counts('testrelease')
             self.assertEqual(result[MagTableKey.COL_FOS_ID][0], 1)
             self.assertEqual(result[MagTableKey.COL_NORM_NAME][0], 'test')
             self.assertEqual(result[MagTableKey.COL_PAP_COUNT][0], 2)
             self.assertEqual(result[MagTableKey.COL_CIT_COUNT][0], 3)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_get_bq_counts(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         mock_response = {MagTableKey.COL_FOS_ID: [1],
@@ -121,12 +118,13 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
                          MagTableKey.COL_CIT_COUNT: [1]}
         with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as mock_call:
             counts = self.module._get_bq_counts(datetime.date(2020, 1, 1))
-            self.assertEqual(counts[MagTableKey.COL_FOS_ID][0], 1)
+            self.assertEqual(counts[MagTableKey.COL_FOS_ID]
+                             [0], 1)
             self.assertEqual(counts[MagTableKey.COL_NORM_NAME][0], 'test')
             self.assertEqual(counts[MagTableKey.COL_PAP_COUNT][0], 2)
             self.assertEqual(counts[MagTableKey.COL_CIT_COUNT][0], 1)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_construct_es_metrics(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         release = datetime.date(2020, 1, 1)
@@ -148,7 +146,7 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
         self.assertEqual(metric.js_dist_paper, None)
         self.assertEqual(metric.js_dist_citation, None)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_construct_es_counts(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         release = datetime.date(2020, 1, 1)
@@ -176,7 +174,7 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
         self.assertEqual(docs[0].delta_ppaper, None)
         self.assertEqual(docs[0].delta_pcitations, None)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_construct_es_docs_diff_fields(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         releases = [datetime.date(2020, 1, 1)]
@@ -206,7 +204,7 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
             self.assertEqual(metric.js_dist_paper, None)
             self.assertEqual(metric.js_dist_citation, None)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_construct_es_docs_same_fields(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         releases = [datetime.date(2020, 1, 1)]
@@ -236,7 +234,7 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
             self.assertEqual(metric.js_dist_paper, 0)
             self.assertEqual(metric.js_dist_citation, 0)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_run_no_releases(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         self.module._cache[MagCacheKey.RELEASES] = []
@@ -248,7 +246,7 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
             self.module.run()
             self.assertEqual(mock_bq.call_count, 0)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_run_fresh(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         self.module._cache[MagCacheKey.RELEASES] = [datetime.date(2020, 1, 1)]
@@ -257,7 +255,7 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
             {MagTableKey.COL_FOS_ID: [2], MagTableKey.COL_NORM_NAME: ['test'],
              MagTableKey.COL_PAP_COUNT: [2], MagTableKey.COL_CIT_COUNT: [1]})
         with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as mock_bq:
-            with patch('observatory_platform.dataquality.mag.bulk_index') as mock_bulk:
+            with patch('observatory_platform.dataquality.mod.mag_fosl0.bulk_index') as mock_bulk:
                 self.module.run()
                 self.assertEqual(mock_bulk.call_count, 1)
                 self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 2)
@@ -277,7 +275,7 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
                 self.assertEqual(metric.js_dist_paper, 0)
                 self.assertEqual(metric.js_dist_citation, 0)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=1)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=1)
     def test_run_update(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         self.module._cache[MagCacheKey.RELEASES] = [datetime.date(2018, 1, 1), datetime.date(2019, 1, 1),
@@ -289,29 +287,31 @@ class TestFieldsOfStudyLevel0Module(unittest.TestCase):
             paper_count = 2
             citation_count = 3
 
-        with patch('observatory_platform.dataquality.mag.search_by_release', return_value=[EsResponse]) as _:
+        with patch('observatory_platform.dataquality.mod.mag_fosl0.search_by_release', return_value=[EsResponse]) as _:
             mock_response = pd.DataFrame(
                 {MagTableKey.COL_FOS_ID: [2], MagTableKey.COL_NORM_NAME: ['test'],
                  MagTableKey.COL_PAP_COUNT: [2], MagTableKey.COL_CIT_COUNT: [1]})
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as mock_bq:
-                with patch('observatory_platform.dataquality.mag.bulk_index') as mock_bulk:
+            with patch('observatory_platform.dataquality.mod.mag_fosl0.pd.read_gbq',
+                       return_value=mock_response) as mock_bq:
+                with patch('observatory_platform.dataquality.mod.mag_fosl0.bulk_index') as mock_bulk:
                     self.module.run()
                     self.assertEqual(mock_bulk.call_count, 1)
                     self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 4)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_fosl0.get_or_init_doc_count', return_value=0)
     def test_run_inconsistent(self, _):
         self.module = FieldsOfStudyLevel0Module('project_id', 'dataset_id', self.cache)
         self.module._cache[MagCacheKey.RELEASES] = [datetime.date(2018, 1, 1), datetime.date(2019, 1, 1),
                                                     datetime.date(2020, 1, 1)]
 
-        with patch('observatory_platform.dataquality.mag.search_by_release', return_value=None) as _:
+        with patch('observatory_platform.dataquality.mod.mag_fosl0.search_by_release', return_value=None) as _:
             mock_response = pd.DataFrame(
                 {MagTableKey.COL_FOS_ID: [2], MagTableKey.COL_NORM_NAME: ['test'],
                  MagTableKey.COL_PAP_COUNT: [2], MagTableKey.COL_CIT_COUNT: [1]})
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as mock_bq:
-                with patch('observatory_platform.dataquality.mag.bulk_index') as mock_bulk:
-                    with patch('observatory_platform.dataquality.mag.clear_index') as _:
+            with patch('observatory_platform.dataquality.mod.mag_fosl0.pd.read_gbq',
+                       return_value=mock_response) as mock_bq:
+                with patch('observatory_platform.dataquality.mod.mag_fosl0.bulk_index') as mock_bulk:
+                    with patch('observatory_platform.dataquality.mod.mag_fosl0.clear_index') as _:
                         self.module.run()
                         self.assertEqual(mock_bulk.call_count, 1)
                         self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 6)
@@ -322,43 +322,49 @@ class TestPaperYearsCountModule(unittest.TestCase):
         super().__init__(*args, **kwargs)
         self.cache = AutoFetchCache(2)
 
-    @patch('observatory_platform.dataquality.mag.init_doc')
+    @patch('observatory_platform.dataquality.mod.mag_paperyearscount.init_doc')
     def test_name(self, _):
         module = PaperYearsCountModule('project_id', 'dataset_id', self.cache)
         self.assertEqual(module.name(), 'PaperYearsCountModule')
 
-    @patch('observatory_platform.dataquality.mag.init_doc')
+    @patch('observatory_platform.dataquality.mod.mag_paperyearscount.init_doc')
     def test_get_paper_year_count(self, _):
         module = PaperYearsCountModule('project_id', 'dataset_id', self.cache)
 
         mock_response = pd.DataFrame({'Year': [1990, 1991, 1992], 'count': [1, 2, 3]})
-        with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as mock_bq:
+        with patch('observatory_platform.dataquality.mod.mag_paperyearscount.pd.read_gbq',
+                   return_value=mock_response) as mock_bq:
             year, count = module._get_paper_year_count(datetime.date(1990, 1, 1))
             self.assertEqual(year, [1990, 1991, 1992])
             self.assertEqual(count, [1, 2, 3])
 
-    @patch('observatory_platform.dataquality.mag.init_doc')
+    @patch('observatory_platform.dataquality.mod.mag_paperyearscount.init_doc')
     def test_run_fresh(self, _):
         self.cache[MagCacheKey.RELEASES] = [datetime.date(2018, 1, 1), datetime.date(2019, 1, 1),
                                             datetime.date(2020, 1, 1)]
         module = PaperYearsCountModule('project_id', 'dataset_id', self.cache)
-        with patch('observatory_platform.dataquality.mag.search_count_by_release', return_value=0) as _:
+        with patch('observatory_platform.dataquality.mod.mag_paperyearscount.search_count_by_release',
+                   return_value=0) as _:
             mock_response = pd.DataFrame({'Year': [1990, 1991, 1992], 'count': [1, 2, 3]})
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as _:
-                with patch('observatory_platform.dataquality.mag.bulk_index', return_value=mock_response) as mock_bulk:
+            with patch('observatory_platform.dataquality.mod.mag_paperyearscount.pd.read_gbq',
+                       return_value=mock_response) as _:
+                with patch('observatory_platform.dataquality.mod.mag_paperyearscount.bulk_index',
+                           return_value=mock_response) as mock_bulk:
                     module.run()
                     self.assertEqual(mock_bulk.call_count, 1)
                     self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 9)
 
-    @patch('observatory_platform.dataquality.mag.init_doc')
+    @patch('observatory_platform.dataquality.mod.mag_paperyearscount.init_doc')
     def test_run_skip_computed(self, _):
         self.cache[MagCacheKey.RELEASES] = [datetime.date(2018, 1, 1), datetime.date(2019, 1, 1),
                                             datetime.date(2020, 1, 1)]
         module = PaperYearsCountModule('project_id', 'dataset_id', self.cache)
-        with patch('observatory_platform.dataquality.mag.search_count_by_release', return_value=1) as _:
+        with patch('observatory_platform.dataquality.mod.mag_paperyearscount.search_count_by_release',
+                   return_value=1) as _:
             mock_response = pd.DataFrame({'Year': [1990, 1991, 1992], 'count': [1, 2, 3]})
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as _:
-                with patch('observatory_platform.dataquality.mag.bulk_index',
+            with patch('observatory_platform.dataquality.mod.mag_paperyearscount.pd.read_gbq',
+                       return_value=mock_response) as _:
+                with patch('observatory_platform.dataquality.mod.mag_paperyearscount.bulk_index',
                            return_value=mock_response) as mock_bulk:
                     module.run()
                     self.assertEqual(mock_bulk.call_count, 0)
@@ -368,66 +374,76 @@ class TestPaperMetricsModule(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_papermetrics.get_or_init_doc_count', return_value=0)
     def test_name(self, _):
         module = PaperMetricsModule('project_id', 'dataset_id', AutoFetchCache(2))
         self.assertEqual(module.name(), 'PaperMetricsModule')
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_papermetrics.get_or_init_doc_count', return_value=0)
     def test_get_paper_null_counts(self, _):
         module = PaperMetricsModule('project_id', 'dataset_id', AutoFetchCache(2))
         mock_response = pd.DataFrame(
             {MagTableKey.COL_DOI: [1, 2, 3], MagTableKey.COL_DOC_TYPE: [1, 1, 1],
              MagTableKey.COL_YEAR: [1, 1, 0], MagTableKey.COL_FAMILY_ID: [4, 5, 6],
              MagTableKey.COL_TOTAL: 100})
-        with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as _:
+        with patch('observatory_platform.dataquality.mod.mag_papermetrics.pd.read_gbq',
+                   return_value=mock_response) as _:
             counts = module._get_paper_null_counts(datetime.date(2019, 1, 1))
             self.assertEqual(counts[MagTableKey.COL_DOI].to_list(), [1, 2, 3])
             self.assertEqual(counts[MagTableKey.COL_DOC_TYPE].to_list(), [1, 1, 1])
             self.assertEqual(counts[MagTableKey.COL_YEAR].to_list(), [1, 1, 0])
             self.assertEqual(counts[MagTableKey.COL_FAMILY_ID].to_list(), [4, 5, 6])
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=0)
+    @patch('observatory_platform.dataquality.mod.mag_papermetrics.get_or_init_doc_count', return_value=0)
     def test_run_fresh(self, _):
         module = PaperMetricsModule('project_id', 'dataset_id', AutoFetchCache(2))
         module._cache[MagCacheKey.RELEASES] = [datetime.date(1990, 1, 1)]
-        with patch('observatory_platform.dataquality.mag.search_count_by_release', return_value=0) as _:
+        with patch('observatory_platform.dataquality.mod.mag_papermetrics.search_count_by_release',
+                   return_value=0) as _:
             mock_response = pd.DataFrame(
                 {MagTableKey.COL_DOI: [1], MagTableKey.COL_DOC_TYPE: [1],
                  MagTableKey.COL_YEAR: [1], MagTableKey.COL_FAMILY_ID: [4],
                  MagTableKey.COL_TOTAL: 10})
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as _:
-                with patch('observatory_platform.dataquality.mag.bulk_index', return_value=mock_response) as mock_bulk:
+            with patch('observatory_platform.dataquality.mod.mag_papermetrics.pd.read_gbq',
+                       return_value=mock_response) as _:
+                with patch('observatory_platform.dataquality.mod.mag_papermetrics.bulk_index',
+                           return_value=mock_response) as mock_bulk:
                     module.run()
                     self.assertEqual(mock_bulk.call_count, 1)
                     self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 1)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=1)
+    @patch('observatory_platform.dataquality.mod.mag_papermetrics.get_or_init_doc_count', return_value=1)
     def test_run_noop(self, _):
         module = PaperMetricsModule('project_id', 'dataset_id', AutoFetchCache(2))
         module._cache[MagCacheKey.RELEASES] = [datetime.date(1990, 1, 1)]
-        with patch('observatory_platform.dataquality.mag.search_count_by_release', return_value=1) as _:
+        with patch('observatory_platform.dataquality.mod.mag_papermetrics.search_count_by_release',
+                   return_value=1) as _:
             mock_response = pd.DataFrame(
                 {MagTableKey.COL_DOI: [1], MagTableKey.COL_DOC_TYPE: [1],
                  MagTableKey.COL_YEAR: [1], MagTableKey.COL_FAMILY_ID: [4],
                  MagTableKey.COL_TOTAL: 10})
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as _:
-                with patch('observatory_platform.dataquality.mag.bulk_index', return_value=mock_response) as mock_bulk:
+            with patch('observatory_platform.dataquality.mod.mag_papermetrics.pd.read_gbq',
+                       return_value=mock_response) as _:
+                with patch('observatory_platform.dataquality.mod.mag_papermetrics.bulk_index',
+                           return_value=mock_response) as mock_bulk:
                     module.run()
                     self.assertEqual(mock_bulk.call_count, 0)
 
-    @patch('observatory_platform.dataquality.mag.get_or_init_doc_count', return_value=1)
+    @patch('observatory_platform.dataquality.mod.mag_papermetrics.get_or_init_doc_count', return_value=1)
     def test_run_update(self, _):
         module = PaperMetricsModule('project_id', 'dataset_id', AutoFetchCache(2))
         module._cache[MagCacheKey.RELEASES] = [datetime.date(1990, 1, 1), datetime.date(1991, 1, 1),
                                                datetime.date(1992, 1, 1)]
-        with patch('observatory_platform.dataquality.mag.search_count_by_release', return_value=0) as _:
+        with patch('observatory_platform.dataquality.mod.mag_papermetrics.search_count_by_release',
+                   return_value=0) as _:
             mock_response = pd.DataFrame(
                 {MagTableKey.COL_DOI: [1], MagTableKey.COL_DOC_TYPE: [1],
                  MagTableKey.COL_YEAR: [1], MagTableKey.COL_FAMILY_ID: [4],
                  MagTableKey.COL_TOTAL: [10]})
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response) as _:
-                with patch('observatory_platform.dataquality.mag.bulk_index', return_value=mock_response) as mock_bulk:
+            with patch('observatory_platform.dataquality.mod.mag_papermetrics.pd.read_gbq',
+                       return_value=mock_response) as _:
+                with patch('observatory_platform.dataquality.mod.mag_papermetrics.bulk_index',
+                           return_value=mock_response) as mock_bulk:
                     module.run()
                     self.assertEqual(mock_bulk.call_count, 1)
                     self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 2)
@@ -443,31 +459,34 @@ class TestPaperMetricsModule(unittest.TestCase):
                     self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][0].pnull_familyid, 0.4)
 
 
-class TestPapersFieldYearCountModule(unittest.TestCase):
+class TestPaperFieldYearCountModule(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cache = AutoFetchCache(2)
 
-    @patch('observatory_platform.dataquality.mag.init_doc')
+    @patch('observatory_platform.dataquality.mod.mag_paperfieldyearcount.init_doc')
     def test_get_year_counts(self, _):
         mock_response = pd.DataFrame({'Year': [1, 2, 3], 'count': [2, 2, 0]})
-        module = PapersFieldYearCountModule('project_id', 'dataset_id', self.cache)
-        with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response):
+        module = PaperFieldYearCountModule('project_id', 'dataset_id', self.cache)
+        with patch('observatory_platform.dataquality.mod.mag_paperfieldyearcount.pd.read_gbq',
+                   return_value=mock_response):
             year_count = module._get_year_counts(1, 'testdate')
             year_count = list(year_count)
             self.assertEqual(len(year_count), 3)
             self.assertEqual(year_count[0][0], 1)
             self.assertEqual(year_count[0][1], 2)
 
-    @patch('observatory_platform.dataquality.mag.init_doc')
+    @patch('observatory_platform.dataquality.mod.mag_paperfieldyearcount.init_doc')
     def test_run(self, _):
-        module = PapersFieldYearCountModule('project_id', 'dataset_id', self.cache)
+        module = PaperFieldYearCountModule('project_id', 'dataset_id', self.cache)
         module._cache[MagCacheKey.RELEASES] = [datetime.date(1990, 1, 1)]
         module._cache[f'{MagCacheKey.FOSL0}19900101'] = [(1, 'testname')]
-        with patch('observatory_platform.dataquality.mag.search_count_by_release', return_value=0):
+        with patch('observatory_platform.dataquality.mod.mag_paperfieldyearcount.search_count_by_release',
+                   return_value=0):
             mock_response = pd.DataFrame({'Year': [1, 2, 3], 'count': [2, 2, 0]})
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response):
-                with patch('observatory_platform.dataquality.mag.bulk_index') as mock_bulk:
+            with patch('observatory_platform.dataquality.mod.mag_paperfieldyearcount.pd.read_gbq',
+                       return_value=mock_response):
+                with patch('observatory_platform.dataquality.mod.mag_paperfieldyearcount.bulk_index') as mock_bulk:
                     module.run()
                     self.assertEqual(mock_bulk.call_count, 1)
                     self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 3)
@@ -483,17 +502,18 @@ class TestDoiCountDocTypeModule(unittest.TestCase):
         super().__init__(*args, **kwargs)
         self.cache = AutoFetchCache(2)
 
-    @patch('observatory_platform.dataquality.mag.init_doc')
+    @patch('observatory_platform.dataquality.mod.mag_doicountdoctype.init_doc')
     def test_run_fresh(self, _):
         module = magdq.DoiCountDocTypeModule('project_id', 'dataset_id', self.cache)
         self.cache[magdq.MagCacheKey.RELEASES] = [datetime.date(1990, 1, 1)]
-        with patch('observatory_platform.dataquality.mag.search_count_by_release', return_value=0):
+        with patch('observatory_platform.dataquality.mod.mag_doicountdoctype.search_count_by_release', return_value=0):
             mock_response = pd.DataFrame(
                 {MagTableKey.COL_DOC_TYPE: ['TestType'], magdq.DoiCountDocTypeModule.BQ_DOC_COUNT: [4],
                  magdq.DoiCountDocTypeModule.BQ_NULL_COUNT: [3]})
 
-            with patch('observatory_platform.dataquality.mag.pd.read_gbq', return_value=mock_response):
-                with patch('observatory_platform.dataquality.mag.bulk_index') as mock_bulk:
+            with patch('observatory_platform.dataquality.mod.mag_doicountdoctype.pd.read_gbq',
+                       return_value=mock_response):
+                with patch('observatory_platform.dataquality.mod.mag_doicountdoctype.bulk_index') as mock_bulk:
                     module.run()
                     self.assertEqual(mock_bulk.call_count, 1)
                     self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 1)

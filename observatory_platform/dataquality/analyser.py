@@ -43,3 +43,42 @@ class DataQualityAnalyser(ABC):
         """
 
         raise NotImplementedError
+
+
+class MagAnalyserModule(ABC):
+    """
+    Analysis module interface for the MAG analyser.
+    """
+
+    @classmethod
+    def __subclasshook__(cls, subclass):
+        return (hasattr(subclass, 'run') and callable(subclass.run) and
+                hasattr(subclass, 'name') and callable(subclass.name) and
+                hasattr(subclass, 'erase') and callable(subclass.erase)
+                or NotImplemented)
+
+    @abstractmethod
+    def run(self, **kwargs):
+        """
+        Run the analyser.
+        @param kwargs: Optional key value arguments to pass into an analyser. See individual analyser documentation.
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def erase(self, index: bool = False, **kwargs):
+        """
+        Erase elastic search records used by the module and possibly delete the index.
+        @param index: If index=True, will also delete indices.
+        @param kwargs: Optional key value arguments to pass into an analyser. See individual analyser documentation.
+        """
+
+        raise NotImplementedError
+
+    def name(self) -> str:
+        """ Get the name of the module.
+        @return: Name of the module.
+        """
+
+        return self.__class__.__name__
