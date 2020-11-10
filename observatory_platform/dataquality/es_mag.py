@@ -145,17 +145,15 @@ class MagDoiCountsDocType(NSDocument):
         name = 'dataquality-mag-doi-counts'
         settings = MagDocIndexSettings.settings
 
-
-class MagDoiCountsFosL0(NSDocument):
-    """ Aggregate doi counts by level 0 fields of study. """
-
+class MagDoiCountsDocTypeYear(NSDocument):
+    """ Aggregate doi counts by year. """
     release = Date(required=True, default_timezone='UTC')
-    fos_id = Text(required=True)
-    fos_name = Text(required=True)
+    doc_type = Text(required=True)
+    year = Long(required=True)
     count = Long(required=True)
     no_doi = Long(required=True)
     pno_doi = Double(required=True)
 
     class Index:
-        name = 'dataquality-mag-doi-counts-fosl0'
+        name = 'dataquality-mag-doi-counts-year'
         settings = MagDocIndexSettings.settings

@@ -44,6 +44,7 @@ from observatory_platform.dataquality.mod.mag_papermetrics import PaperMetricsMo
 from observatory_platform.dataquality.mod.mag_paperyearscount import PaperYearsCountModule
 from observatory_platform.dataquality.mod.mag_paperfieldyearcount import PaperFieldYearCountModule
 from observatory_platform.dataquality.mod.mag_doicountdoctype import DoiCountDocTypeModule
+from observatory_platform.dataquality.mod.mag_doicountsdoctypeyear import DoiCountsDocTypeYearModule
 
 class MagAnalyser(DataQualityAnalyser):
     """
@@ -147,6 +148,7 @@ class MagAnalyser(DataQualityAnalyser):
             default_modules.append(PaperYearsCountModule(self._project_id, self._dataset_id, self._cache))
             default_modules.append(PaperFieldYearCountModule(self._project_id, self._dataset_id, self._cache))
             default_modules.append(DoiCountDocTypeModule(self._project_id, self._dataset_id, self._cache))
+            default_modules.append(DoiCountsDocTypeYearModule(self._project_id, self._dataset_id, self._cache))
 
             for module in default_modules:
                 mods[module.name()] = module

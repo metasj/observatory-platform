@@ -116,16 +116,20 @@ class DoiCountDocTypeModule(MagAnalyserModule):
             count = counts[DoiCountDocTypeModule.BQ_DOC_COUNT][i]
             no_doi = counts[DoiCountDocTypeModule.BQ_NULL_COUNT][i]
             doc_type = counts[MagTableKey.COL_DOC_TYPE][i]
+            pno_doi = 0
+            if count != 0:
+                pno_doi = no_doi / count
+
             if doc_type is None:
                 doc_type = "null"
 
             doc = MagDoiCountsDocType(release=release.isoformat(), doc_type=doc_type, count=count, no_doi=no_doi,
-                                      pno_doi=no_doi / count)
+                                      pno_doi=pno_doi)
             docs.append(doc)
 
         return docs
 
-    def _get_bq_counts(self, ts: str):
+    def _get_bq_counts(self, ts: str) -> pd.DataFrame:
         """
         Get the Doi counts by DocType from the BigQuery table.
         @param ts: Timestamp to use as table suffix.
