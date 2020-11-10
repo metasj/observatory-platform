@@ -105,10 +105,11 @@ class DoiCountDocTypeModule(MagAnalyserModule):
         ts = release.strftime('%Y%m%d')
         logging.info(f'DoiCountDocTypeModule processing release {ts}')
 
-        if search_count_by_release(MagDoiCountsDocType, release.isoformat()) > 0:
-            return
-
         docs = list()
+
+        if search_count_by_release(MagDoiCountsDocType, release.isoformat()) > 0:
+            return docs
+
         counts = self._get_bq_counts(ts)
         n_counts = len(counts[MagTableKey.COL_DOC_TYPE])
         for i in range(n_counts):
