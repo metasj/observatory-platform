@@ -51,4 +51,4 @@ class MagTableKey:
 
 
 class MagParams:
-    BQ_SESSION_LIMIT = 20  # BQ limit is 100.
+    BQ_SESSION_LIMIT = 10  # BQ limit is 100.
