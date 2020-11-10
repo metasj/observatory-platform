@@ -85,7 +85,7 @@ class PaperFieldYearCountModule(MagAnalyserModule):
 
             for id, name, year_count in year_counts:
                 for year, count in year_count:
-                    doc = MagPapersFieldYearCount(release=release.isoformat(), field_name=name, field_id=id, year=year,
+                    doc = MagPapersFieldYearCount(release=release, field_name=name, field_id=id, year=year,
                                                   count=count)
                     docs.append(doc)
 

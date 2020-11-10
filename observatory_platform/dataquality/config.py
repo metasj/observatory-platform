@@ -49,6 +49,8 @@ class MagTableKey:
     COL_FAMILY_ID = 'FamilyId'
     COL_DOC_TYPE = 'DocType'
 
+    COL_LEVEL = 'Level'
+
 
 class MagParams:
     BQ_SESSION_LIMIT = 10  # BQ limit is 100.

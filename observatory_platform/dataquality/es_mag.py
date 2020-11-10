@@ -96,6 +96,27 @@ class MagPapersMetrics(NSDocument):
         settings = MagDocIndexSettings.settings
 
 
+class MagFosLevelCount(NSDocument):
+    """ Number of Fields of study per level, and the number of documents at each level. """
+
+    release = Date(required=True, default_timezone='UTC')
+    level = Long(required=True)
+    level_count = Long(required=True)
+    num_papers = Long(required=True)
+    num_citations = Long(required=True)
+
+    class Index:
+        name = 'dataquality-mag-fos-level-count'
+        settings = MagDocIndexSettings.settings
+
+# TODO
+class MagAvgFosPaperYear(NSDocument):
+    """ Calculate average number of field of study labels per paper per year.
+    Sum up the number of field of study labels for a year, and divide by number of papers for that year.
+
+     """
+
+
 class MagFosL0Metrics(NSDocument):
     """ Level 0 Fields Of Study metrics on the relative subject labels on each paper. Note that a paper can have several
         labels.

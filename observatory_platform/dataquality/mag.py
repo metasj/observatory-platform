@@ -27,9 +27,9 @@ from jinja2 import Environment, PackageLoader
 from typing import Union, List, Tuple
 
 from observatory_platform.dataquality.config import (
-  JinjaParams,
-  MagCacheKey,
-  MagTableKey
+    JinjaParams,
+    MagCacheKey,
+    MagTableKey
 )
 
 from observatory_platform.dataquality.analyser import (
@@ -45,6 +45,7 @@ from observatory_platform.dataquality.mod.mag_paperyearscount import PaperYearsC
 from observatory_platform.dataquality.mod.mag_paperfieldyearcount import PaperFieldYearCountModule
 from observatory_platform.dataquality.mod.mag_doicountdoctype import DoiCountDocTypeModule
 from observatory_platform.dataquality.mod.mag_doicountsdoctypeyear import DoiCountsDocTypeYearModule
+from observatory_platform.dataquality.mod.mag_foslevelcount import FosLevelCountModule
 
 class MagAnalyser(DataQualityAnalyser):
     """
@@ -95,7 +96,7 @@ class MagAnalyser(DataQualityAnalyser):
         """
 
         for module in self._modules.values():
-            module.erase(index)
+            module.erase(index, **kwargs)
 
     def _init_cache(self):
         """ Initialise some common things in the auto fetcher cache. """
@@ -142,13 +143,15 @@ class MagAnalyser(DataQualityAnalyser):
 
         # Use default modules.
         else:
-            default_modules = list()
-            default_modules.append(FieldsOfStudyLevel0Module(self._project_id, self._dataset_id, self._cache))
-            default_modules.append(PaperMetricsModule(self._project_id, self._dataset_id, self._cache))
-            default_modules.append(PaperYearsCountModule(self._project_id, self._dataset_id, self._cache))
-            default_modules.append(PaperFieldYearCountModule(self._project_id, self._dataset_id, self._cache))
-            default_modules.append(DoiCountDocTypeModule(self._project_id, self._dataset_id, self._cache))
-            default_modules.append(DoiCountsDocTypeYearModule(self._project_id, self._dataset_id, self._cache))
+            default_modules = [
+                FieldsOfStudyLevel0Module(self._project_id, self._dataset_id, self._cache),
+                PaperMetricsModule(self._project_id, self._dataset_id, self._cache),
+                PaperYearsCountModule(self._project_id, self._dataset_id, self._cache),
+                PaperFieldYearCountModule(self._project_id, self._dataset_id, self._cache),
+                DoiCountDocTypeModule(self._project_id, self._dataset_id, self._cache),
+                DoiCountsDocTypeYearModule(self._project_id, self._dataset_id, self._cache),
+                MagFosLevelCountModule(self._project_id, self._dataset_id, self._cache),
+            ]
 
             for module in default_modules:
                 mods[module.name()] = module
