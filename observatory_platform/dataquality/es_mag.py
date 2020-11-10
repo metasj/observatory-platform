@@ -55,7 +55,7 @@ class MagPapersFieldYearCount(NSDocument):
     """ Number of papers per field per year. """
 
     release = Date(required=True, default_timezone='UTC')
-    field_name = Text(required=True)
+    field_name = Keyword(required=True)
     field_id = Long(required=True)
     year = Long(required=True)
     count = Long(required=True)
@@ -118,7 +118,7 @@ class MagFosL0Counts(NSDocument):
 
     release = Date(required=True, default_timezone='UTC')
     field_id = Long(required=True)
-    normalized_name = Text(required=True)
+    normalized_name = Keyword(required=True)
     paper_count = Long(required=True)
     citation_count = Long(required=True)
     delta_ppaper = Double(required=True)
@@ -136,7 +136,7 @@ class MagDoiCountsDocType(NSDocument):
     """ Aggregate counts and proportions of documents with no DOI by document type. """
 
     release = Date(required=True, default_timezone='UTC')
-    doc_type = Text(required=True)
+    doc_type = Keyword(required=True)
     count = Long(required=True)
     no_doi = Long(required=True)
     pno_doi = Double(required=True)
@@ -148,7 +148,7 @@ class MagDoiCountsDocType(NSDocument):
 class MagDoiCountsDocTypeYear(NSDocument):
     """ Aggregate doi counts by year. """
     release = Date(required=True, default_timezone='UTC')
-    doc_type = Text(required=True)
+    doc_type = Keyword(required=True)
     year = Long(required=True)
     count = Long(required=True)
     no_doi = Long(required=True)
