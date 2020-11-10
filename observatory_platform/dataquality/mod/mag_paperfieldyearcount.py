@@ -78,12 +78,12 @@ class PaperFieldYearCountModule(MagAnalyserModule):
             with ThreadPoolExecutor(max_workers=MagParams.BQ_SESSION_LIMIT) as executor:
                 futures = list()
                 for id, name in fos_ids:
-                    futures.append(executor.submit(self._get_year_counts, id, ts))
+                    futures.append(executor.submit(self._get_year_counts, id, name, ts))
 
                 for future in as_completed(futures):
                     year_counts.append(future.result())
 
-            for year_count in year_counts:
+            for id, name, year_count in year_counts:
                 for year, count in year_count:
                     doc = MagPapersFieldYearCount(release=release.isoformat(), field_name=name, field_id=id, year=year,
                                                   count=count)
@@ -105,9 +105,10 @@ class PaperFieldYearCountModule(MagAnalyserModule):
         if index:
             delete_index(MagPapersFieldYearCount)
 
-    def _get_year_counts(self, id: int, ts: str) -> Iterator[Tuple[int, int]]:
+    def _get_year_counts(self, id: int, name: str, ts: str) -> Iterator[Tuple[int, int]]:
         """ Get the paper counts per field per year for each level 0 field of study.
         @param id: FieldOfStudy id to pull data for.
+        @param name: FieldOfStudy name.
         @param ts: timestamp to use as a suffix for the table id.
         @return: zip(year, count) information.
         """
@@ -115,4 +116,4 @@ class PaperFieldYearCountModule(MagAnalyserModule):
         sql = self._tpl_count_per_field.render(project_id=self._project_id, dataset_id=self._dataset_id, release=ts,
                                                fos_id=id)
         df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
-        return zip(df['Year'].to_list(), df['count'].to_list())
+        return (id, name, zip(df['Year'].to_list(), df['count'].to_list()))
