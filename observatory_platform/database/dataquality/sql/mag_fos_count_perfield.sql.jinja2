@@ -16,7 +16,7 @@
 
 
 WITH temp as ((
-SElECT paper.PaperId, Year, FieldOfStudyId
+SElECT Year
 FROM `{{ project_id }}.{{ dataset_id }}.Papers{{ release }}` as paper
 INNER JOIN `{{ project_id }}.{{ dataset_id }}.PaperFieldsOfStudy{{ release }}` as pfos
 ON paper.PaperId = pfos.PaperId WHERE FieldOfStudyID = {{ fos_id }}
