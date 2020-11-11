@@ -34,6 +34,7 @@ from observatory_platform.utils.es_utils import (
     delete_index,
 )
 
+from observatory_platform.dataquality.utils import proportion_delta
 from observatory_platform.dataquality.es_mag import MagPapersFieldYearCount
 
 
@@ -84,9 +85,18 @@ class PaperFieldYearCountModule(MagAnalyserModule):
                     year_counts.append(future.result())
 
             for id, name, year_count in year_counts:
-                for year, count in year_count:
-                    doc = MagPapersFieldYearCount(release=release, field_name=name, field_id=id, year=year,
-                                                  count=count)
+                year_count = list(year_count)
+                n = len(year_count)
+                years = [year_count[i][0] for i in range(n)]
+                counts = [year_count[i][1] for i in range(n)]
+
+                prev = [0] + counts[:-1]
+                delta = proportion_delta(counts, prev)
+                for i in range(len(years)):
+                    year = years[i]
+                    count = counts[i]
+                    doc = MagPapersFieldYearCount(release=release, field_name=name, field_id=id, year=str(year),
+                                                  count=count, delta_pcount=delta[i], delta_count=counts[i]-prev[i])
                     docs.append(doc)
 
         logging.info(f'Indexing {len(docs)} MagPapersFieldYearCount documents.')

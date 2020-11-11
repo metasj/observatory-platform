@@ -57,8 +57,10 @@ class MagPapersFieldYearCount(NSDocument):
     release = Date(required=True, default_timezone='UTC')
     field_name = Keyword(required=True)
     field_id = Long(required=True)
-    year = Long(required=True)
+    year = Keyword(required=True)
     count = Long(required=True)
+    delta_count = Long(required=True)
+    delta_pcount = Double(required=True)
 
     class Index:
         name = 'dataquality-mag-papers-field-year'
@@ -69,8 +71,10 @@ class MagPapersYearCount(NSDocument):
     """ Number of papers in MAG for a given year. """
 
     release = Date(required=True, default_timezone='UTC')
-    year = Long(required=True)
+    year = Keyword(required=True)
     count = Long(required=True)
+    delta_pcount = Double(required=True)
+    delta_count = Long(required=True)
 
     class Index:
         name = 'dataquality-mag-papers-year'
@@ -170,7 +174,7 @@ class MagDoiCountsDocTypeYear(NSDocument):
     """ Aggregate doi counts by year. """
     release = Date(required=True, default_timezone='UTC')
     doc_type = Keyword(required=True)
-    year = Long(required=True)
+    year = Keyword(required=True)
     count = Long(required=True)
     no_doi = Long(required=True)
     pno_doi = Double(required=True)

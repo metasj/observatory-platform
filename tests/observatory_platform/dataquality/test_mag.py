@@ -355,6 +355,12 @@ class TestPaperYearsCountModule(unittest.TestCase):
                     module.run()
                     self.assertEqual(mock_bulk.call_count, 1)
                     self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 9)
+                    self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][0].delta_pcount, 1000000000, 5)
+                    self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][1].delta_pcount, 1.0)
+                    self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][2].delta_pcount, 0.5)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].delta_count, 1)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][1].delta_count, 1)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][2].delta_count, 1)
 
     @patch('observatory_platform.dataquality.mod.mag_paperyearscount.init_doc')
     def test_run_skip_computed(self, _):
@@ -499,6 +505,12 @@ class TestPaperFieldYearCountModule(unittest.TestCase):
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].field_id, 1)
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].year, 1)
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].count, 2)
+                    self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][0].delta_pcount, 2000000000, 5)
+                    self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][1].delta_pcount, 0)
+                    self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][2].delta_pcount, -1)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].delta_count, 2)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][1].delta_count, 0)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][2].delta_count, -2)
 
 
 class TestDoiCountDocTypeModule(unittest.TestCase):

@@ -25,6 +25,7 @@ from typing import Tuple, List
 from observatory_platform.dataquality.analyser import MagAnalyserModule
 from jinja2 import Environment, PackageLoader
 
+from observatory_platform.dataquality.utils import proportion_delta
 from observatory_platform.dataquality.config import JinjaParams, MagCacheKey, MagTableKey
 from observatory_platform.dataquality.es_mag import MagPapersYearCount
 from observatory_platform.utils.es_utils import (
@@ -34,6 +35,7 @@ from observatory_platform.utils.es_utils import (
     bulk_index,
     delete_index,
 )
+
 
 class PaperYearsCountModule(MagAnalyserModule):
     """ MagAnalyser module to compute paper counts by year from MAG. """
@@ -69,8 +71,13 @@ class PaperYearsCountModule(MagAnalyserModule):
                 continue
             year, counts = self._get_paper_year_count(releases[i])
 
+            # Proportional difference between years
+            prev = [0] + counts[:-1]
+            delta = proportion_delta(counts, prev)
+
             for j in range(len(year)):
-                paper_count = MagPapersYearCount(release=releases[i].isoformat(), year=year[j], count=counts[j])
+                paper_count = MagPapersYearCount(release=releases[i].isoformat(), year=str(year[j]), count=counts[j],
+                                                 delta_pcount=delta[j], delta_count=counts[j]-prev[j])
                 docs.append(paper_count)
 
         logging.info(f'Constructed {len(docs)} MagPapersYearCount documents.')
