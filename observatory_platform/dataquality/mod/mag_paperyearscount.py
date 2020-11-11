@@ -76,7 +76,7 @@ class PaperYearsCountModule(MagAnalyserModule):
             delta = proportion_delta(counts, prev)
 
             for j in range(len(year)):
-                paper_count = MagPapersYearCount(release=releases[i].isoformat(), year=str(year[j]), count=counts[j],
+                paper_count = MagPapersYearCount(release=releases[i].isoformat(), year=str(int(year[j])), count=counts[j],
                                                  delta_pcount=delta[j], delta_count=counts[j]-prev[j])
                 docs.append(paper_count)
 
