@@ -5,11 +5,12 @@ Telecopes
 
     crossref_metadata
     crossref_events
+    doab
     fundref
     geonames
     grid
     mag
-    unpaywall
-    terraform
-    wos
     scopus
+    terraform
+    unpaywall
+    wos
