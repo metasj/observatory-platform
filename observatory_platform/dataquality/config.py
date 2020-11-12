@@ -30,6 +30,7 @@ class MagCacheKey:
     RELEASES = 'releases'  # MAG release dates
     FOSL0 = 'fosl0_'  # concatenated with a date string. List of MAG FoS Level 0 fields.
     DOC_TYPE = 'doctype_'  # concatenated with a date string. Doctype from a release.
+    FOS_LEVELS = 'foslevels_'  # concatenated with a date string. Field of study levels for a release.
 
 
 class MagTableKey:
@@ -48,7 +49,6 @@ class MagTableKey:
     COL_TOTAL = 'total'
     COL_FAMILY_ID = 'FamilyId'
     COL_DOC_TYPE = 'DocType'
-
     COL_LEVEL = 'Level'
 
 

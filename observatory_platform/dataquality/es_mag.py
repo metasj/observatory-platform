@@ -113,12 +113,17 @@ class MagFosLevelCount(NSDocument):
         name = 'dataquality-mag-fos-level-count'
         settings = MagDocIndexSettings.settings
 
-# TODO
-class MagAvgFosPaperYear(NSDocument):
-    """ Calculate average number of field of study labels per paper per year.
-    Sum up the number of field of study labels for a year, and divide by number of papers for that year.
 
-     """
+class MagFosLevelCountYear(NSDocument):
+    """ Calculate the number of papers per year across the different levels of field of study. """
+    release = Date(required=True, default_timezone='UTC')
+    year = Keyword(required=True)
+    level = Long(required=True)
+    count = Long(required=True)
+
+    class Index:
+        name = 'dataquality-mag-fos-level-count-year'
+        settings = MagDocIndexSettings.settings
 
 
 class MagFosL0Metrics(NSDocument):
@@ -182,3 +187,28 @@ class MagDoiCountsDocTypeYear(NSDocument):
     class Index:
         name = 'dataquality-mag-doi-counts-year'
         settings = MagDocIndexSettings.settings
+
+
+# class MagDoiCountsFosL0(NSDocument):
+#     """ Aggregate doi counts by level 0 fields of study. """
+#
+#     release = Date(required=True, default_timezone='UTC')
+#     fos_id = Keyword(required=True)
+#     fos_name = Keyword(required=True)
+#     count = Long(required=True)
+#     no_doi = Long(required=True)
+#     pno_doi = Double(required=True)
+#
+#     class Index:
+#         name = 'dataquality-mag-doi-counts-fosl0'
+#         settings = MagDocIndexSettings.settings
+#
+#
+# class MagDoiCountsFosL0Year(NSDocument):
+#     pass
+#
+# class MagDocTypeCountsFosL0(NSDocument):
+#     pass
+#
+# class MagDocTypeCountsFosL0Year(NSDocument):
+#     pass

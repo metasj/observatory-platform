@@ -46,6 +46,8 @@ from observatory_platform.dataquality.mod.mag_paperfieldyearcount import PaperFi
 from observatory_platform.dataquality.mod.mag_doicountdoctype import DoiCountDocTypeModule
 from observatory_platform.dataquality.mod.mag_doicountsdoctypeyear import DoiCountsDocTypeYearModule
 from observatory_platform.dataquality.mod.mag_foslevelcount import FosLevelCountModule
+from observatory_platform.dataquality.mod.mag_foslevelcountyear import FosLevelCountYearModule
+
 
 class MagAnalyser(DataQualityAnalyser):
     """
@@ -103,6 +105,7 @@ class MagAnalyser(DataQualityAnalyser):
 
         self._init_releases_fetcher()
         self._init_fosl0_fetcher()
+        self._init_foslevels_fetcher()
         self._init_doctype_fetcher()
 
     def _init_releases_fetcher(self):
@@ -117,6 +120,14 @@ class MagAnalyser(DataQualityAnalyser):
         for release in releases:
             ts = release.strftime('%Y%m%d')
             self._cache.set_fetcher(f'{MagCacheKey.FOSL0}{ts}', lambda key: self._get_fosl0(key))
+
+    def _init_foslevels_fetcher(self):
+        """ Initialise the fields of study level 0 id/name fetcher. """
+
+        releases = self._cache[MagCacheKey.RELEASES]
+        for release in releases:
+            ts = release.strftime('%Y%m%d')
+            self._cache.set_fetcher(f'{MagCacheKey.FOS_LEVELS}{ts}', lambda key: self._get_fos_levels(key))
 
     def _init_doctype_fetcher(self):
         """ Initialise the doc_type fetcher for each release. """
@@ -151,6 +162,7 @@ class MagAnalyser(DataQualityAnalyser):
                 DoiCountDocTypeModule(self._project_id, self._dataset_id, self._cache),
                 DoiCountsDocTypeYearModule(self._project_id, self._dataset_id, self._cache),
                 FosLevelCountModule(self._project_id, self._dataset_id, self._cache),
+                FosLevelCountYearModule(self._project_id, self._dataset_id, self._cache),
             ]
 
             for module in default_modules:
@@ -203,5 +215,22 @@ class MagAnalyser(DataQualityAnalyser):
 
         df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
         doc_types = df[MagTableKey.COL_DOC_TYPE].to_list()
+
+        return doc_types
+
+    def _get_fos_levels(self, key) -> List[str]:
+        """ Get the field of study levels list for each release.
+        @param key: Key used to access cache. Suffix is release date.
+        @return: List of levels for that release.
+        """
+
+        table_suffix = key[key.find('_') + 1:]
+        sql = self._tpl_select.render(project_id=self._project_id, dataset_id=self._dataset_id,
+                                      table_id=f'{MagTableKey.TID_FOS}{table_suffix}',
+                                      columns=[f'DISTINCT({MagTableKey.COL_LEVEL})'],
+                                      order_by=MagTableKey.COL_LEVEL)
+
+        df = pd.read_gbq(sql, project_id=self._project_id, progress_bar_type=None)
+        doc_types = df[MagTableKey.COL_LEVEL].to_list()
 
         return doc_types

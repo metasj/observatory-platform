@@ -33,7 +33,7 @@ from observatory_platform.dataquality.mag import MagAnalyser
 from observatory_platform.dataquality.analyser import MagAnalyserModule
 from observatory_platform.dataquality.config import MagTableKey, MagCacheKey
 from observatory_platform.dataquality.mod.mag_foslevelcount import FosLevelCountModule
-
+from observatory_platform.dataquality.mod.mag_foslevelcountyear import FosLevelCountYearModule
 
 class TestMagAnalyser(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -503,7 +503,7 @@ class TestPaperFieldYearCountModule(unittest.TestCase):
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].release, datetime.date(1990, 1, 1))
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].field_name, 'testname')
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].field_id, 1)
-                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].year, 1)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].year, '1')
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].count, 2)
                     self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][0].delta_pcount, 2000000000, 5)
                     self.assertAlmostEqual(mock_bulk.call_args_list[0][0][0][1].delta_pcount, 0)
@@ -568,7 +568,7 @@ class TestDoiCountsDocTypeYearModule(unittest.TestCase):
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].count, 4)
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].no_doi, 3)
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].pno_doi, 0.75)
-                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].year, 1990)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].year, '1990')
 
 
 class TestFosLevelCountModule(unittest.TestCase):
@@ -600,3 +600,31 @@ class TestFosLevelCountModule(unittest.TestCase):
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].level_count, 4)
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].num_papers, 2)
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].num_citations, 3)
+
+
+class TestFosLevelCountYearModule(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache = AutoFetchCache(2)
+
+    @patch('observatory_platform.dataquality.mod.mag_foslevelcountyear.init_doc')
+    def test_run_fresh(self, _):
+        module = FosLevelCountYearModule('project_id', 'dataset_id', self.cache)
+        self.cache[MagCacheKey.RELEASES] = [datetime.date(1990, 1, 1)]
+        self.cache[f'{MagCacheKey.FOS_LEVELS}{19900101}'] = [0]
+
+        with patch('observatory_platform.dataquality.mod.mag_foslevelcountyear.search_count_by_release', return_value=0):
+            mock_response = pd.DataFrame(
+                {MagTableKey.COL_YEAR: [5], FosLevelCountYearModule.BQ_COUNT: [4], MagTableKey.COL_LEVEL: [0]
+                 })
+
+            with patch('observatory_platform.dataquality.mod.mag_foslevelcountyear.pd.read_gbq',
+            return_value=mock_response):
+                with patch('observatory_platform.dataquality.mod.mag_foslevelcountyear.bulk_index') as mock_bulk:
+                    module.run()
+                    self.assertEqual(mock_bulk.call_count, 1)
+                    self.assertEqual(len(mock_bulk.call_args_list[0][0][0]), 1)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].release, datetime.date(1990, 1, 1))
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].level, 0)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].count, 4)
+                    self.assertEqual(mock_bulk.call_args_list[0][0][0][0].year, '5')
