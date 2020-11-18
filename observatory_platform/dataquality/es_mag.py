@@ -189,6 +189,66 @@ class MagDoiCountsDocTypeYear(NSDocument):
         settings = MagDocIndexSettings.settings
 
 
+class MagFosCountPubFieldYear(NSDocument):
+    """ Paper, citation, reference counts per publisher, per field, per year. """
+
+    release = Date(required=True, default_timezone='UTC')
+    publisher = Keyword(required=True)
+    year = Keyword(required=True)
+    paper_count = Long(required=True)
+    citation_count = Long(required=True)
+    ref_count = Long(required=True)
+
+    class Index:
+        name = 'dataquality-mag-fos-counts-pub-field-year'
+        settings = MagDocIndexSettings.settings
+
+
+class MagFosL0ScoreFieldYear(NSDocument):
+    """ Histogram bucket of saliency scores for the FieldsOfStudy labels, per field, per year. """
+
+    release = Date(required=True, default_timezone='UTC')
+    field_id = Long(required=True)
+    field_name = Keyword(required=True)
+    year = Keyword(required=True)
+    score_start = Double(required=True)
+    score_end = Double(required=True)
+    count = Double(required=True)
+
+    class Index:
+        name = 'dataquality-mag-fos-l0-score-field-year'
+        settings = MagDocIndexSettings.settings
+
+
+class MagFosL0ScoreFieldYearMetricY(NSDocument):
+    """ The Jensen Shannon distance between histograms of two consecutive years for the FieldsOfStudy labels,
+    per field, per year."""
+
+    release = Date(required=True, default_timezone='UTC')
+    field_id = Long(required=True)
+    field_name = Keyword(required=True)
+    year = Keyword(required=True)
+    js_dist = Double(required=True)
+
+    class Index:
+        name = 'dataquality-mag-fos-l0-score-field-year-metric-year'
+        settings = MagDocIndexSettings.settings
+
+class MagFosL0ScoreFieldYearMetricR(NSDocument):
+    """ The Jensen Shannon distance between histograms of two consecutive releases for the FieldsOfStudy labels,
+    per field, per year."""
+
+    release = Date(required=True, default_timezone='UTC')
+    field_id = Long(required=True)
+    field_name = Keyword(required=True)
+    year = Keyword(required=True)
+    js_dist = Double(required=True)
+
+    class Index:
+        name = 'dataquality-mag-fos-l0-score-field-year-metric-release'
+        settings = MagDocIndexSettings.settings
+
+
 # class MagDoiCountsFosL0(NSDocument):
 #     """ Aggregate doi counts by level 0 fields of study. """
 #
