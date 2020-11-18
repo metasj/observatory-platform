@@ -90,6 +90,13 @@ def search_count_by_release(es_doc: IndexMeta, release: str):
     return Search(index=es_doc.Index.name).query('match', release=release).count()
 
 
+def search(es_doc: IndexMeta, sort_field: Union[None, str] = None, **kwargs):
+    s = Search(index=es_doc.Index.name).query('match', **kwargs)
+    if sort_field:
+        s = s.sort(sort_field)
+    return list(s.scan())
+
+
 def search_by_release(es_doc: IndexMeta, release: str, sort_field: Union[None, str] = None):
     """ Search elastic search index for a particular release document.
     @param es_doc: IndexMeta class for the index name.
@@ -98,10 +105,7 @@ def search_by_release(es_doc: IndexMeta, release: str, sort_field: Union[None, s
     @return: List of documents found.
     """
 
-    s = Search(index=es_doc.Index.name).query('match', release=release)
-    if sort_field:
-        s = s.sort(sort_field)
-    return list(s.scan())
+    return search(es_doc, sort_field=sort_field, release=release)
 
 
 def bulk_index(docs: List[Document]):
