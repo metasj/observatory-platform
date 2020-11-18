@@ -16,37 +16,30 @@
 
 # Author: Tuan Chien
 
-from observatory_platform.dataquality.mag import MagAnalyser
-from elasticsearch_dsl import connections
-import pydata_google_auth
+
 from google.oauth2 import service_account
+from observatory_platform.dataquality.mag import MagAnalyser
 
+from elasticsearch_dsl import connections
 
-# Temporary stuff for GCP credentials
-SCOPES = [
-    'https://www.googleapis.com/auth/cloud-platform',
-    'https://www.googleapis.com/auth/drive',
-]
+# Google credentials
 # credentials = service_account.Credentials.from_service_account_file('path/to/key.json')
-credentials = pydata_google_auth.get_user_credentials(
-    SCOPES,
-    # Set auth_local_webserver to True to have a slightly more convienient
-    # authorization flow. Note, this doesn't work if you're running from a
-    # notebook on a remote sever, such as over SSH or with Google Colab.
-    auth_local_webserver=True
-)
-
 
 def init_es_connection():
-    user = 'tuan.chien'
-    password = 'tuancoki'
-    hostname = '2de27cd7b8724f519461a303757a3f52.us-west1.gcp.cloud.es.io'
-    port = '9243'
+    """ Elastic search connection details. """
+
+    user = ''
+    password = ''
+    hostname = ''
+    port = ''
     connections.create_connection(hosts=[f'https://{user}:{password}@{hostname}:{port}'], timeout=60)
 
 
 if __name__ == '__main__':
     init_es_connection()
+    project_id = ''
+    dataset_id = ''
 
-    mag = MagAnalyser()
+    mag = MagAnalyser(project_id, dataset_id)
     mag.run()
+    # mag.erase(index=True)
