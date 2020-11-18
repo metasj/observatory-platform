@@ -40,4 +40,4 @@ pbr==5.5.*
 elasticsearch==7.*
 elasticsearch-dsl==7.*
 cachetools==4.1.*
-pandas-gbq=0.14.*
+pandas-gbq==0.14.*
