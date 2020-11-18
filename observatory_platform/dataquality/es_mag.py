@@ -139,7 +139,7 @@ class MagFosL0Metrics(NSDocument):
     js_dist_citation = Double()
 
     class Index:
-        name = 'dataquality-mag-fieldsofstudy-l0-metrics'
+        name = 'dataquality-mag-fos-l0-metrics'
         settings = MagDocIndexSettings.settings
 
 
@@ -155,7 +155,7 @@ class MagFosL0Counts(NSDocument):
     delta_pcitations = Double(required=True)
 
     class Index:
-        name = 'dataquality-mag-fieldsofstudy-l0-counts'
+        name = 'dataquality-mag-fos-l0-counts'
         settings = {
             'number_of_shards': 2,
             'number_of_replicas': 0
