@@ -628,3 +628,10 @@ class TestFosLevelCountYearModule(unittest.TestCase):
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].level, 0)
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].count, 4)
                     self.assertEqual(mock_bulk.call_args_list[0][0][0][0].year, '5')
+
+
+class TestFosL0ScoreFieldYearModule(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache = AutoFetchCache(2)
+

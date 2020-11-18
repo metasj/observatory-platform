@@ -23,7 +23,6 @@ from observatory_platform.dataquality.config import JinjaParams, MagCacheKey, Ma
 from jinja2 import Environment, PackageLoader
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
-
 from typing import Iterator, Tuple
 
 from observatory_platform.utils.es_utils import (
