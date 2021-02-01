@@ -260,21 +260,25 @@ class CrossrefEventsRelease:
                                    f'not "{CrossrefEventsTelescope.DOWNLOAD_MODE}"')
 
         self.urls = []
-        edited_deleted = False
+        # edited_deleted = False
         for batch in batches:
             start_date = batch[0]
             end_date = batch[1]
             event_type_urls = [CrossrefEventsTelescope.EVENTS_URL.format(mailto=mail_address, start_date=start_date,
-                                                                         end_date=end_date)]
-            # only add edited/deleted urls to first batch, since no end date can be specified
-            if edited_deleted or first_release:
-                pass
-            else:
-                event_type_urls.append(CrossrefEventsTelescope.EDITED_URL.format(mailto=mail_address,
-                                                                                 start_date=start_date))
-                event_type_urls.append(CrossrefEventsTelescope.DELETED_URL.format(mailto=mail_address,
-                                                                                  start_date=start_date))
-                edited_deleted = True
+                                                                         end_date=end_date),
+                               CrossrefEventsTelescope.EDITED_URL.format(mailto=mail_address, start_date=start_date,
+                                                                         end_date=end_date),
+                               CrossrefEventsTelescope.DELETED_URL.format(mailto=mail_address, start_date=start_date,
+                                                                          end_date=end_date)]
+            # # only add edited/deleted urls to first batch, since no end date can be specified
+            # if edited_deleted or first_release:
+            #     pass
+            # else:
+            #     event_type_urls.append(CrossrefEventsTelescope.EDITED_URL.format(mailto=mail_address,
+            #                                                                      start_date=start_date)
+            #     event_type_urls.append(CrossrefEventsTelescope.DELETED_URL.format(mailto=mail_address,
+            #                                                                       start_date=start_date)
+            #     edited_deleted = True
             self.urls.append(event_type_urls)
 
     @property
@@ -420,12 +424,12 @@ class CrossrefEventsTelescope:
     EVENTS_URL = 'https://api.eventdata.crossref.org/v1/events?mailto={mailto}&from-collected-date={' \
                  'start_date}&until-collected-date={end_date}&rows=10000'
     # TODO get info in false 'until-updated-date' field
-    # EDITED_URL = f'https://api.eventdata.crossref.org/v1/events/edited?mailto={mailto}&from-updated-date={' \
-    #              f'start_date}&until-updated-date={end_date}&rows=10000'
     EDITED_URL = 'https://api.eventdata.crossref.org/v1/events/edited?mailto={mailto}&from-updated-date={' \
-                 'start_date}&rows=10000'
+                 'start_date}&until-updated-date={end_date}&rows=10000'
+    # EDITED_URL = 'https://api.eventdata.crossref.org/v1/events/edited?mailto={mailto}&from-updated-date={' \
+    #              'start_date}&rows=10000'
     DELETED_URL = 'https://api.eventdata.crossref.org/v1/events/deleted?mailto={mailto}&from-updated-date={' \
-                  'start_date}&rows=10000'
+                  'start_date}&until-updated-date={end_date}&rows=10000'
 
     TASK_ID_CHECK_DEPENDENCIES = "check_dependencies"
     TASK_ID_CHECK_RELEASE = "check_release"
