@@ -455,6 +455,37 @@ class VirtualMachine:
         return VirtualMachine(machine_type, disk_size, disk_type, create)
 
 
+@dataclass
+class ElasticSearch:
+    """ The elasticsearch settings for the Observatory Platform API.
+
+    Attributes:
+        host: the address of the elasticsearch host
+        api_key: the api key to use the elasticsearch API.
+     """
+
+    host: str
+    api_key: str
+
+    def to_hcl(self):
+        return to_hcl({
+            'host': self.host,
+            'api_key': self.api_key,
+        })
+
+    @staticmethod
+    def from_dict(dict_: Dict) -> ElasticSearch:
+        """ Constructs a CloudSqlDatabase instance from a dictionary.
+
+        :param dict_: the dictionary.
+        :return: the CloudSqlDatabase instance.
+        """
+
+        host = dict_.get('host')
+        api_key = dict_.get('api_key')
+        return ElasticSearch(host, api_key)
+
+
 def customise_pointer(field, value, error):
     """ Throw an error when a field contains the value ' <--' which means that the user should customise the
     value in the config file.
@@ -708,6 +739,7 @@ class TerraformConfig(ObservatoryConfig):
                  cloud_sql_database: CloudSqlDatabase = None,
                  airflow_main_vm: VirtualMachine = None,
                  airflow_worker_vm: VirtualMachine = None,
+                 elasticsearch: ElasticSearch = None,
                  validator: ObservatoryConfigValidator = None):
         """ Create a TerraformConfig instance.
 
@@ -735,6 +767,7 @@ class TerraformConfig(ObservatoryConfig):
         self.cloud_sql_database = cloud_sql_database
         self.airflow_main_vm = airflow_main_vm
         self.airflow_worker_vm = airflow_worker_vm
+        self.elasticsearch = elasticsearch
 
     @property
     def terraform_workspace_id(self):
@@ -787,7 +820,9 @@ class TerraformConfig(ObservatoryConfig):
                 TerraformVariable('airflow_variables', list_to_hcl(self.airflow_variables), hcl=True,
                                   sensitive=False),
                 TerraformVariable('airflow_connections', list_to_hcl(self.airflow_connections), hcl=True,
-                                  sensitive=sensitive)]
+                                  sensitive=sensitive),
+                TerraformVariable('elasticsearch', self.elasticsearch.to_hcl(), sensitive=sensitive, hcl=True)
+                ]
 
     @classmethod
     def from_dict(cls, dict_: Dict) -> TerraformConfig:
@@ -811,6 +846,7 @@ class TerraformConfig(ObservatoryConfig):
             cloud_sql_database = CloudSqlDatabase.from_dict(dict_.get('cloud_sql_database', dict()))
             airflow_main_vm = VirtualMachine.from_dict(dict_.get('airflow_main_vm', dict()))
             airflow_worker_vm = VirtualMachine.from_dict(dict_.get('airflow_worker_vm', dict()))
+            elasticsearch = ElasticSearch.from_dict(dict_.get('elasticsearch', dict()))
 
             return TerraformConfig(backend,
                                    airflow,
@@ -822,6 +858,7 @@ class TerraformConfig(ObservatoryConfig):
                                    cloud_sql_database=cloud_sql_database,
                                    airflow_main_vm=airflow_main_vm,
                                    airflow_worker_vm=airflow_worker_vm,
+                                   elasticsearch=elasticsearch,
                                    validator=validator)
         else:
             return TerraformConfig(validator=validator)
@@ -1046,6 +1083,21 @@ def make_schema(backend_type: BackendType) -> Dict:
                     'required': True,
                     'type': 'string',
                 }
+            }
+        }
+    }
+
+    schema['elasticsearch'] = {
+        'required': True,
+        'type': 'dict',
+        'schema': {
+            'host': {
+                'required': True,
+                'type': 'string'
+            },
+            'api_key': {
+                'required': True,
+                'type': 'string',
             }
         }
     }
