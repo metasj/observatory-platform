@@ -108,3 +108,14 @@ EOF
     host = string
   })
 }
+
+variable "api" {
+  description = <<EOF
+Settings related to the Observatory API
+
+domain_name: The custom domain name
+EOF
+  type = object({
+    domain_name = string
+  })
+}
